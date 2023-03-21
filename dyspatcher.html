@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dyspatcher</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <script src="dyspatcher.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { box-sizing:border-box; font-family:Roboto,Helvetica,Arial,sans-serif; }
+    .text-right { text-align:right !important; }
+    .clearfix:after { visibility:hidden; display:block; font-size:0; content:" "; clear:both; height:0; }
+    .red { color:red; }
+    body { background-color:#f4f7f6; }
+    h3 { margin:0 0 15px; }
+    input, textarea { font-size:14px; background:#f2f2f2; width:100%; border:0; padding:15px; outline:none; }
+    a { color:#4CAF50; text-decoration:none; }
+    button { font-size:14px; text-transform:uppercase; background:#4CAF50; border:0; padding:5px 15px; color:#FFFFFF; cursor:pointer; }
+      button:hover { background:#43A047; }
+    #loading { position:absolute; top:30%; width:100%; padding:0 20px; text-align:center; color:#939393; font-size:16px; letter-spacing:5px; line-height:2em; }
+    #chat { position:absolute; top:10px; bottom:20px; left:10px; right:10px; display:flex; flex-wrap:nowrap; background:#fff; border-radius:10px; box-shadow:0 1px 2px 0 rgb(0 0 0 / 10%); }
+      #chat aside { display:none; width:25%; max-width:280px; min-width:130px; padding:20px; overflow:hidden; border-right:1px solid #4CAF50; }
+        #chat aside.active { display:block; }
+        #chat aside ul { padding-left:0; list-style:none; }
+          #chat aside ul li { padding:10px 15px; list-style:none; border-radius:3px; font-size:15px; }
+            #chat aside ul li:hover { background:#efefef; cursor:pointer; }
+            #chat aside ul li.lock:after { content:" 🔒"; }
+      #chat main { display:flex; flex-flow:column nowrap; align-items:flex-start; flex-grow:2; }
+        #chat main header { width:100%; padding:15px 20px; }
+          #chat main header #chat-connect { display:none; max-width:360px; margin:40px auto; padding:45px; text-align:center; box-shadow:0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24); }
+            #chat main header #chat-connect.active { display:block; }
+            #chat main header #chat-connect input { margin:0 0 15px; }
+            #chat main header #chat-connect button { width:100%; padding:15px; }
+            #chat main header #chat-connect p { margin:15px 0 0; color:#b3b3b3; font-size:12px; }
+          #chat main header #chat-localuser { display:none; border-bottom:2px solid #4CAF50; }
+            #chat main header #chat-localuser h3 { display:inline-block; margin-right:10px; }
+        #chat main .content { display:flex; flex-grow:2; width:100%; min-height:0; padding:0 20px; }
+          #chat main .content #userslist-toggler { display:none; position:absolute; top:50%; left:0; color:#FFF; transform:rotate(-90deg); transform-origin:0% 0%; }
+          #chat main .content ul { width:100%; padding:0 20px 0; overflow:scroll; scroll-behavior:smooth; }
+            #chat main .content ul li { list-style:none; margin-bottom:15px; font-size:14px; }
+              #chat main .content ul li:last-child { margin-bottom:0px; }
+                #chat main .content .message-user { color:#434651; padding-left:6px; cursor:pointer; }
+                #chat main .content .message { color:#444; padding:10px 20px; border-radius:7px; position:relative; max-width:60%; }
+                  #chat main .content .message.my { background:#efefef; text-align:right; float:right; cursor:pointer; }
+                  #chat main .content .message.other { background:#e8f1f3; float:left; cursor:pointer; }
+                  #chat main .content .message.signal { background:#f2f2f2; text-align:center; font-size:14px; width:50%; max-width:none; margin:auto; padding:2px 10px; color:#697077; border-radius:10px; }
+                  #chat main .content .message.admin { background:#F08080; cursor:pointer; }
+        #chat main footer { width:100%; }
+          #chat main footer #chat-message { padding:20px; display:none; }
+            #chat main footer #chat-message textarea { flex:1 1 auto; border:1px solid #4CAF50; resize:none; }
+    @media only screen and (max-width:1280px) {
+      #chat main .content .message { max-width:70%; }
+      #chat main .content .message.signal { width:60%; }
+    }
+    @media only screen and (max-width:1024px) {
+      #chat aside.active { display:none; }
+        #chat.userslist-open aside { display:block !important; }
+      #chat main .content #userslist-toggler.active { display:block; }
+        #chat.userslist-open main .content #userslist-toggler { left:25%; }
+      #chat main .content .message { max-width:80%; }
+      #chat main .content .message.signal { width:90%; }
+    }
+  </style>
+</head>
+
+<body>
+<div id="chat">
+  <section id="loading"><h3>Loading, please wait...</h3>Interface objects: </section>
+  <aside id="chat-userslist">
+    <h3>Users</h3>
+    <ul id="userslist"></ul>
+  </aside>
+  <main>
+    <header>
+      <div id="chat-connect">
+        <h3>Connect to chat service</h3>
+        <input type="text" id="user" placeholder="Enter your name" onkeypress="CHAT.userEventHandlerKeypress(event)" autofocus>
+        <button id="chatInitButton" onclick="CHAT.chatInit(__WEBSOCKET_PORT_TOKEN__)">Connect</button>
+        <p>Only lowercase letters and digits, no spaces, no special characters, minimum 4 maximum 15 characters</p>
+      </div>
+      <div id="chat-localuser">
+        <h3 id="chat-localuser-name"></h3>
+        <button onclick="CHAT.chatDisconnect()">Disconnect</button>
+      </div>
+    </header>
+    <div class="content">
+      <button id="userslist-toggler" onclick="CHAT.userslistTogglerEventHandlerClick(event)">▼ Users list ▼</button>
+      <ul id="receivedMessages"></ul>
+    </div>
+    <footer>
+      <div class="clearfix" id="chat-message">
+        <textarea id="chat-message-txt" placeholder="Select a destination (@username or @all) and write a message (max 350 characters)" onkeypress="CHAT.messageEventHandlerKeypress(event)" maxlength="350"></textarea>
+        <button onclick="CHAT.sendMessageEventHandlerClick()">Send</button>
+      </div>
+    </footer>
+  </main>
+</div>
+</body>
+</html>

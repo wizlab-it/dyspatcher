@@ -92,13 +92,13 @@ SSH Port Forwarding can be configured with these options:
  * **--sshpfw-user**: User on SSH Server
  * **--sshpfw-keyfile**: Key file for SSH Public Key Authentication
 
-**Example**: Dyspatcher is running on a device on a private network with internet access. The local IP Address is *192.168.1.123*. A remote SSH Server is available at *11.22.33.44*, SSH running on the default port *22*, and an user *dyspatcherpfw* is active on the SSH Server and allowed to activate port forwarding. SSH Public Key Authentication is available for user *dyspatcherpfw*, and its private key is stored in the *dyspatcherpfw.key* file.
+**Example**: Dyspatcher is running on a device on a private network with internet access. A remote SSH Server is available at *11.22.33.44*, SSH running on the default port *22*, and an user *dyspatcherpfw* is active on the SSH Server and allowed to activate port forwarding. SSH Public Key Authentication is available for user *dyspatcherpfw*, and its private key is stored in the *dyspatcherpfw.key* file.
 
 ```
-python dyspatcher.py -i 192.168.1.123 --sshpfw-ip-address 11.22.33.44 --sshpfw-port 22 --sshpfw-user dyspatcherpfw --sshpfw-keyfile dyspatcherpfw.key
+python dyspatcher.py --sshpfw-ip-address 11.22.33.44 --sshpfw-port 22 --sshpfw-user dyspatcherpfw --sshpfw-keyfile dyspatcherpfw.key
 ```
 
-The command starts the server locally, then establishes a tunnel with the SSH Server forwarding the Web (80, default) and WebSocket (81, default) ports. Custom ports, HTTP or HTTPS, are reflected accordingly. The chat is then available on the local network at ```http://192.168.1.123```, and from the internet at ```http://11.22.33.44```
+The command starts the server locally, then establishes a tunnel with the SSH Server forwarding the Web (80, default) and WebSocket (81, default) ports. Custom ports, HTTP or HTTPS, are reflected accordingly. The chat is then available on localhost at ```http://127.0.0.1```, and from the internet at ```http://11.22.33.44```
 
 
 ### How to run on smartphones
@@ -166,7 +166,7 @@ If the server runs with HTTP and the browser doesn't allow to access the *crypto
 
 ### Problems with HTTPS using self-signed SSL certificate
 
-When HTTPS is activated on the server with self-signed certificates, the browsers will require the user to manually accept the certificate (the standard *"This connection is not secure"* or *Potential Security Risk Ahead* alert).
+When HTTPS is activated on the server with self-signed certificates, the browsers will require the user to manually accept the certificate (the standard *"This connection is not private"* or *"Potential Security Risk Ahead"* alert).
 
 In those cases the certificate needs to be accepted manually for both the Web Server *and* the Web Socket. Web Server certificate can be easily accepted following the instructions from the browser shown when opening the chat client. When connecting to the service, if the connection to the Web Socket fails because of a self-signed certificate, instructions to accept the certificate are shown in the chat.
 
