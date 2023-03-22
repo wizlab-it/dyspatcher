@@ -50,10 +50,10 @@ And now, if you are still interested, the long part.
    * [Other parameters](#other-parameters)
  * [Client](#client)
  * [Encryption](#encryption)
-   * [crypto.subtle Javascript Web API restrictions](#crypto-subtle-javascript-web-api-restrictions)
+   * [*crypto.subtle* Javascript Web API restrictions](#cryptosubtle-javascript-web-api-restrictions)
    * [Problems with HTTPS using self-signed SSL certificate](#problems-with-https-using-self-signed-ssl-certificate)
    * [Encryption with openssl](#encryption-with-openssl)
- * [What you can learn here even if you don't care at all of a chat service](#what-you-can-learn-here-even-if-you-don-t-care-at-all-of-a-chat-service)
+ * [What you can learn here even if you don't care at all of a chat service](#what-you-can-learn-here-even-if-you-dont-care-at-all-of-a-chat-service)
  * [TODO](#todo)
 
 ---
