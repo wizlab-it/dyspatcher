@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.8'
-BUILD = '20230321.094'
+BUILD = '20230322.095'
 ###########################################################
 
 import argparse
@@ -122,7 +122,14 @@ async def chatEngine(websocket):
   # Add new client to the list of clients and process communication
   try:
     async for payload in websocket:
-      payloadObj = json.loads(payload)
+
+      # Check if payload is JSON, if not set a fake payload
+      try:
+        payloadObj = json.loads(payload)
+      except:
+        payloadObj = {'cmd':''}
+
+      # Process payload
       match payloadObj['cmd']:
 
         # Command is a normal message, print on the console and dispatch
