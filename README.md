@@ -240,7 +240,7 @@ Here you can learn:
  - how to handle multiprocessing in Python
  - how to use Web Socket in Python and Javascript
  - how to implement a Web Server in Python to serve files and contents
- - how to use RSA cryptography in Python, JavaScript and OpenSSL (command line), and how to decrypt and verify the signature of messages encrypted and signed in different programming languages
+ - how to use RSA cryptography in Python (*cryptography* module), JavaScript (*crypto.subtle* Web API) and OpenSSL (command line), and how to decrypt and verify the signature of messages encrypted and signed in different programming languages
 
 ---
 
