@@ -1,8 +1,8 @@
 # dyspatcher
 
-Dyspatcher is a full, standalone and independent communication system (chat) with end-to-end encryption.
+*Dyspatcher* is a full, standalone and independent real-time communication system (chat) with end-to-end encryption.
 
-The aim is to provide a complete real-time messaging service that can be activated by non-specialised personnel in hostile environments with makeshifts.
+The aim is to provide a complete and secure real-time messaging service that can be activated by non-specialised personnel in hostile environments with makeshifts.
 
 The chat client is web-based and runs on any (modern) desktop/mobile browser.
 
@@ -11,9 +11,56 @@ The server is written in *Python* (3.11) and requires the *cryptography* module.
 Integrated features help to make the service available even in those cases where the device running the server is not directly reachable from the internet.
 
 
+## TL;DR
+
+Ok, that sounds nice but before reading this whole loooong page you want to give it a try and see if it's worth wasting some time here.
+
+The easiest way is to try it locally. Just execute:
+
+```
+python dyspatcher.py
+```
+
+to start the service, then connect to ```http://127.0.0.1``` with any browser. You'll be able to chat with yourself, the web interface is the user whilst the command line interface is the admin.
+
+Nice.
+
+Now you want to try it on the network with different devices, maybe to chat between your laptop and the smartphone. Things are a bit more complex since HTTPS is required: if you want to know why, just keep reading this page.
+
+In this package you can find a dummy SSL self-signed certificate (*webserver.crt* and *webserver.key*) to easily start the service over HTTPS. Use this certificate only for this test, please.
+
+If your local IP Address is *192.168.1.123*, then execute:
+
+```
+python dyspatcher.py -i 192.168.1.123 --ssl-certificate webserver.crt --ssl-key webserver.key
+```
+
+then connect to ```https://192.168.1.123``` to use the chat web interface. Since it's using a self-signed certificate you have to manually accept it. If you are using Firefox you might be required of an extra step, just read the warning that's shown when connecting to the service.
+
+And now, if you are still interested, the long part.
+
+---
+
+## Summary
+ * [Server](#server)
+   * [HTTPS Web Server](#https-web-server)
+   * [SSH Port Forwarding](#ssh-port-forwarding)
+   * [How to run on smartphones](#how-to-run-on-smartphones)
+   * [Administrator interface](#administrator-interface)
+   * [Other parameters](#other-parameters)
+ * [Client](#client)
+ * [Encryption](#encryption)
+   * [crypto.subtle Javascript Web API restrictions](#crypto-subtle-javascript-web-api-restrictions)
+   * [Problems with HTTPS using self-signed SSL certificate](#problems-with-https-using-self-signed-ssl-certificate)
+   * [Encryption with openssl](#encryption-with-openssl)
+ * [What you can learn here even if you don't care at all of a chat service](#what-you-can-learn-here-even-if-you-don-t-care-at-all-of-a-chat-service)
+ * [TODO](#todo)
+
+---
+
 ## Server
 
-The whole application is managed by dyspatcher.py
+The whole application is managed by *dyspatcher.py*
 
 The server handles four processes:
  - **Web Server**: provides the chat web interface to clients
@@ -140,11 +187,13 @@ Other available startup options are:
  * **--disable-all**: by default, users can send messages to the special **@all** destination, that delivers the message to all the connected users. This option disables the **@all** destinations for users (admin can always send to *@all*)
  * **--only-admin**: by default, users can send messages each other, and the users list shows all the connected users. This option allows users to send messages only to the administrator. When set, the users list only shows the administrator, and all the other normal users are hidden
 
+---
 
 ## Client
 
 The client is web based and runs on any modern desktop/mobile web browser.
 
+---
 
 ## Encryption
 
@@ -183,6 +232,17 @@ echo "Hello world" | openssl pkeyutl -encrypt -pubin -inkey public.key -pkeyopt 
 openssl pkeyutl -decrypt -inkey private.key -in message.enc -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
 ```
 
+---
+
+## What you can learn here even if you don't care at all of a chat service
+
+Here you can learn:
+ - how to handle multiprocessing in Python
+ - how to use Web Socket in Python and Javascript
+ - how to implement a Web Server in Python to serve files and contents
+ - how to use RSA cryptography in Python, JavaScript and OpenSSL (command line), and how to decrypt and verify the signature of messages encrypted and signed in different programming languages
+
+---
 
 ## TODO
 
