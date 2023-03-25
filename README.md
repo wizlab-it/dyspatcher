@@ -191,14 +191,14 @@ Other available startup options are:
 
 ## Client
 
-The client is web based and runs on any modern desktop/mobile web browser (via teh *crypto.subtle* Javascript Web API).
+The client is web based and runs on any modern desktop/mobile web browser.
 
 
 ### Custom encryption keys
 
-By default, on loading the Web Client generates new random encryption keys.
+By default, on loading the Web Client generates new random encryption keys (via the *crypto.subtle* Javascript Web API).
 
-It is possible to use custom key, generated manually. To set the custome keys, click on the *Use custom keys* link on the login form and enter the private and public keys along with the username you want to use.
+It is possible to use custom encryption keys, generated manually. To set the custom keys, click on the *Use custom keys* link on the login form and enter the private and public keys along with the username you want to use.
 
 Encryption keys can be generated with *openssl*:
 
