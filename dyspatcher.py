@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.8'
-BUILD = '20230324.096'
+BUILD = '20230325.102'
 ###########################################################
 
 import argparse
@@ -163,7 +163,7 @@ async def chatEngine(websocket):
                   await sendMessage(ADMIN_NICKNAME, CLIENTS[websocketId], html.escape(MISC_CONFIG['welcome-message']))
 
                 # Send config
-                await sendCommand('config', '', { 'disable-all':MISC_CONFIG['disable-all'] })
+                await sendCommand('config', '', { 'disable-all':MISC_CONFIG['disable-all'], 'keyid':keyhash }, [websocket])
 
               else:
                 await sendCommand('signal', '', { 'code':'chat-invaliduser' }, [websocket])
@@ -274,8 +274,10 @@ async def chatClose():
 # Init Crypto
 def initCrypto():
   CRYPTO_CONFIG['privatekey'] = rsa.generate_private_key(public_exponent=65537, key_size=4096)
+  CRYPTO_CONFIG['privatekey-pem'] = CRYPTO_CONFIG['privatekey'].private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
   CRYPTO_CONFIG['publickey'] = CRYPTO_CONFIG['privatekey'].public_key()
-  CRYPTO_CONFIG['publickey-text'] = packPublicKey(CRYPTO_CONFIG['publickey'].public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo))
+  CRYPTO_CONFIG['publickey-pem'] = CRYPTO_CONFIG['publickey'].public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
+  CRYPTO_CONFIG['publickey-text'] = packPublicKey(CRYPTO_CONFIG['publickey-pem'])
   CRYPTO_CONFIG['publickey-hash'] = hashlib.sha256(CRYPTO_CONFIG['publickey-text'].encode('utf-8')).hexdigest()
   printPrompt('[+] ... Crypto started')
 
@@ -352,34 +354,50 @@ def promptProcessor():
     case '/':
       match commandOrDestination:
 
-        # Command: users
+        # Command: users - list all connected users
         case 'users':
           printPrompt('[i] Connected users:')
-          cnt = 0
+          printPrompt('[i]   * ' + TXT_RED + ADMIN_NICKNAME + TXT_CLEAR + ' (🔒' + CRYPTO_CONFIG['publickey-hash'][:10] + ')')
+          cnt = 1
           for c in CLIENTS:
-            printPrompt('[i]   * ' + CLIENTS[c]['user'] + (' 🔒' if (CLIENTS[c]['publickey'] != None) else ''))
+            printPrompt('[i]   * ' + CLIENTS[c]['user'] + ((' (🔒' + CLIENTS[c]['publickey']['hash'][:10] + ')') if (CLIENTS[c]['publickey'] != None) else ''))
             cnt = cnt + 1
           printPrompt('[i] ' + str(cnt) + ' user' + ('s' if (cnt != 1) else '') + ' connected')
 
-        # Command: kick
+        # Command: kick - disconnect an user
         case 'kick':
           wsUser = False
           if(len(promptInput) == 2):
             wsUser = getClientByUser(promptInput[1].strip())
           if(wsUser == False):
-            printPrompt('[i] Usage: ' + TXT_BOLD + '/kick username' + TXT_CLEAR)
+            printPrompt('[i] Usage: ' + TXT_BOLD + '/kick [username]' + TXT_CLEAR)
             return
           try:
             asyncio.run(wsUser['ws'].close())
           except:
             pass
 
-        # Command: help
+        # Command: key - show private/public keys
+        case 'key':
+          try:
+            if(len(promptInput) != 2):
+              raise Exception('Err')
+            if(promptInput[1] == 'public'):
+              printPrompt('\n' + CRYPTO_CONFIG["publickey-pem"].decode('utf-8'))
+            elif(promptInput[1] == 'private'):
+              printPrompt('\n' + CRYPTO_CONFIG["privatekey-pem"].decode('utf-8'))
+            else:
+              raise Exception('Err')
+          except:
+            printPrompt('[i] Usage: ' + TXT_BOLD + '/key [public/private]' + TXT_CLEAR)
+            return
+
+        # Command: help - show help
         case 'help':
-          printPrompt('[i] Commands: /users, /kick username, /help, /quit')
+          printPrompt('[i] Commands: /users, /kick [username], /key [public|private], /help, /quit')
           printPrompt('[i] Messages: @{username} {message}')
 
-        # Command: quit
+        # Command: quit - stop the service
         case 'quit':
           stopServices()
 

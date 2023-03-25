@@ -3,7 +3,7 @@ var CHAT = {
   SOCKET: null,
   USER: null,
   ADMIN: null,
-  OBJ_IDS: ["loading", "chat", "user", "chat-connect", "chat-localuser-name", "chat-userslist", "chat-localuser", "chat-message", "chat-message-txt", "userslist", "userslist-toggler", "chatInitButton", "receivedMessages", "custom-keys", "custom-private-key", "custom-public-key"],
+  OBJ_IDS: ["loading", "chat", "user", "chat-connect", "chat-localuser-name", "chat-userslist", "chat-localuser", "chat-message", "chat-message-txt", "userslist", "userslist-toggler", "chatInitButton", "receivedMessages", "custom-keys", "custom-private-key", "custom-public-key", "chat-localuser-keyid"],
   OBJS: {},
   CONFIGS: null,
   CRYPTO: {
@@ -11,9 +11,15 @@ var CHAT = {
       "oaep": { "name":"RSA-OAEP", "modulusLength":4096, "publicExponent": new Uint8Array([1, 0, 1]), "hash":"SHA-256" },
       "pss": { "name":"RSA-PSS", "hash":"SHA-256", "saltLength":256 },
     },
-    "keys": { "objs":null, "pem":{} },
+    "keys": { "objs":null, "pem":{}, "keyid":null },
     "publickeyCache": {},
   },
+
+  // Constants
+  PEM_PRIVATE_HEADER: "-----BEGIN PRIVATE KEY-----",
+  PEM_PRIVATE_FOOTER: "-----END PRIVATE KEY-----",
+  PEM_PUBLIC_HEADER: "-----BEGIN PUBLIC KEY-----",
+  PEM_PUBLIC_FOOTER: "-----END PUBLIC KEY-----",
 
   /////////////////////////////////////////////////////////
 
@@ -156,7 +162,12 @@ var CHAT = {
 
         // Config received
         case "config":
+          // Save full configs
           CHAT.CONFIGS = payload.data;
+
+          // Store and show own key ID
+          CHAT.CRYPTO.keys.keyid = payload.data.keyid;
+          CHAT.OBJS["chat-localuser-keyid"].innerHTML = CHAT.CRYPTO.keys.keyid.substr(0, 10);
           break;
       }
     } catch { }
@@ -240,8 +251,8 @@ var CHAT = {
     return new Promise((keysStatus) => {
       try {
         // Convert PEM to binary
-        let privateKeyBin = CHAT.str2ab(window.atob(privateKeyPem.substring("-----BEGIN PRIVATE KEY-----".length, (privateKeyPem.length - "-----END PRIVATE KEY-----".length))));
-        let publicKeyBin = CHAT.str2ab(window.atob(publicKeyPem.substring("-----BEGIN PUBLIC KEY-----".length, (publicKeyPem.length - "-----END PUBLIC KEY-----".length))));
+        let privateKeyBin = CHAT.str2ab(window.atob(privateKeyPem.substring(CHAT.PEM_PRIVATE_HEADER.length, (privateKeyPem.length - CHAT.PEM_PRIVATE_FOOTER.length))));
+        let publicKeyBin = CHAT.str2ab(window.atob(publicKeyPem.substring(CHAT.PEM_PUBLIC_HEADER.length, (publicKeyPem.length - CHAT.PEM_PUBLIC_FOOTER.length))));
 
         // Load private key
         window.crypto.subtle.importKey("pkcs8", privateKeyBin, CHAT.CRYPTO.config.oaep, true, ["decrypt"]).then(privateKey => {
@@ -287,6 +298,30 @@ var CHAT = {
         CHAT.CRYPTO.publickeyCache[hash]["verify"] = publickeyVerify;
       });
     });
+  },
+
+  // Download encryption keys
+  cryptoDownloadKey: function(type) {
+    let pemKey = "";
+    switch(type) {
+      case "private":
+        pemKey += CHAT.PEM_PRIVATE_HEADER + "\n";
+        pemKey += CHAT.CRYPTO.keys.pem.private.replace(/([^\n]{1,64})/g, '$1\n');
+        pemKey += CHAT.PEM_PRIVATE_FOOTER + "\n";
+        break;
+      case "public":
+        pemKey += CHAT.PEM_PUBLIC_HEADER + "\n";
+        pemKey += CHAT.CRYPTO.keys.pem.public.replace(/([^\n]{1,64})/g, '$1\n');
+        pemKey += CHAT.PEM_PUBLIC_FOOTER + "\n";
+        break;
+      default:
+        return;
+    }
+    let temp = document.createElement("a");
+    let blob = new Blob([pemKey], {"type":"text/plain"});
+    temp.href = window.URL.createObjectURL(blob);
+    temp.download = type + ".pem";
+    temp.click();
   },
 
   // Get user public key from cache
@@ -475,7 +510,7 @@ var CHAT = {
     let userBlock = document.createElement("li");
     userBlock.id = "userslist-user-" + user;
     userBlock.classList.add("userslist-user");
-    userBlock.appendChild(document.createTextNode(user));
+    userBlock.innerHTML = "<div class='user'>" + user + "</div><div class='keyid'>Key ID: " + publickey.hash.substr(0, 10) + "</div>";
     userBlock.dataset.user = user;
     if(((typeof publickey) === "object") && (publickey.text != "")) {
       userBlock.dataset.user = user;
@@ -484,7 +519,7 @@ var CHAT = {
       userBlock.classList.add("lock");
     }
     userBlock.addEventListener("click", function(event) {
-      CHAT.setMessageDestination(event.srcElement.dataset.user);
+      CHAT.setMessageDestination(event.target.dataset.user);
     });
     CHAT.OBJS["userslist"].appendChild(userBlock);
   },
@@ -505,7 +540,7 @@ var CHAT = {
   },
 
   showCustomKeysFields: function(event) {
-    event.srcElement.innerHTML = (CHAT.OBJS["custom-keys"].classList.toggle("active")) ? "Use random keys" : "Use custom keys";
+    event.target.innerHTML = (CHAT.OBJS["custom-keys"].classList.toggle("active")) ? "Use random keys" : "Use custom keys";
     CHAT.OBJS["custom-private-key"].value = "";
     CHAT.OBJS["custom-public-key"].value = "";
   }

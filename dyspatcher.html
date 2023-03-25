@@ -23,7 +23,9 @@
         #chat aside ul { padding-left:0; list-style:none; }
           #chat aside ul li { padding:10px 15px; list-style:none; border-radius:3px; font-size:15px; }
             #chat aside ul li:hover { background:#efefef; cursor:pointer; }
-            #chat aside ul li.lock:after { content:" 🔒"; }
+              #chat aside ul li.lock div { pointer-events:none; }
+                #chat aside ul li.lock div.user:after { content:" 🔒"; }
+                #chat aside ul li.lock div.keyid { font-size:12px; color:#939393; }
       #chat main { display:flex; flex-flow:column nowrap; align-items:flex-start; flex-grow:2; }
         #chat main header { width:100%; padding:15px 20px; }
           #chat main header #chat-connect { display:none; max-width:400px; margin:40px auto; padding:45px; text-align:center; box-shadow:0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24); }
@@ -33,7 +35,8 @@
             #chat main header #chat-connect button { width:100%; padding:15px; }
             #chat main header #chat-connect p { margin:20px 0 0; color:#b3b3b3; font-size:12px; }
           #chat main header #chat-localuser { display:none; border-bottom:2px solid #4CAF50; }
-            #chat main header #chat-localuser h3 { display:inline-block; margin-right:10px; }
+            #chat main header #chat-localuser h3 { display:inline-block; margin:0 10px 10px 0; }
+            #chat main header #chat-localuser .chat-localuser-keydetails { font-size:12px; color:#939393; margin-bottom:15px; }
         #chat main .content { display:flex; flex-grow:2; width:100%; min-height:0; padding:0 20px; }
           #chat main .content #userslist-toggler { display:none; position:absolute; top:50%; left:0; color:#FFF; transform:rotate(-90deg); transform-origin:0% 0%; }
           #chat main .content ul { width:100%; padding:0 20px 0; overflow:scroll; scroll-behavior:smooth; }
@@ -86,8 +89,15 @@
         <p><a onclick="CHAT.showCustomKeysFields(event);">Use custom keys</a></p>
       </div>
       <div id="chat-localuser">
-        <h3 id="chat-localuser-name"></h3>
-        <button onclick="CHAT.chatDisconnect()">Disconnect</button>
+        <div>
+          <h3 id="chat-localuser-name"></h3>
+          <button onclick="CHAT.chatDisconnect()">Disconnect</button>
+        </div>
+        <div class="chat-localuser-keydetails">
+          Key ID: <span id="chat-localuser-keyid"></span> &bull;
+          <a onclick="CHAT.cryptoDownloadKey('private');">Download private key</a> &bull;
+          <a onclick="CHAT.cryptoDownloadKey('public');">Download public key</a>
+        </div>
       </div>
     </header>
     <div class="content">
