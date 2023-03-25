@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.8'
-BUILD = '20230322.095'
+BUILD = '20230324.096'
 ###########################################################
 
 import argparse
@@ -326,7 +326,7 @@ def initSSHPFW():
     webserverPFW = SSH_PFW_CONFIG['ip'] + ':' + str(WEBSERVER_PORT) + ':127.0.0.1:' + str(WEBSERVER_PORT)
     websocketPFW = SSH_PFW_CONFIG['ip'] + ':' + str(WEBSOCKET_PORT) + ':127.0.0.1:' + str(WEBSOCKET_PORT)
     userhostPFW = SSH_PFW_CONFIG['user'] + '@' + SSH_PFW_CONFIG['ip']
-    SSH_PFW_CONFIG['process'] = subprocess.Popen(['/usr/bin/ssh', '-p', SSH_PFW_CONFIG['port'], '-N', '-R', webserverPFW, '-R', websocketPFW, '-i', SSH_PFW_CONFIG['key'], userhostPFW])
+    SSH_PFW_CONFIG['process'] = subprocess.Popen(['ssh', '-p', SSH_PFW_CONFIG['port'], '-N', '-R', webserverPFW, '-R', websocketPFW, '-i', SSH_PFW_CONFIG['key'], userhostPFW])
     printPrompt('[+] ... SSH Port Forward started')
 
 

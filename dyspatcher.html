@@ -13,7 +13,7 @@
     body { background-color:#f4f7f6; }
     h3 { margin:0 0 15px; }
     input, textarea { font-size:14px; background:#f2f2f2; width:100%; border:0; padding:15px; outline:none; }
-    a { color:#4CAF50; text-decoration:none; }
+    a { color:#4CAF50; text-decoration:none; cursor:pointer; }
     button { font-size:14px; text-transform:uppercase; background:#4CAF50; border:0; padding:5px 15px; color:#FFFFFF; cursor:pointer; }
       button:hover { background:#43A047; }
     #loading { position:absolute; top:30%; width:100%; padding:0 20px; text-align:center; color:#939393; font-size:16px; letter-spacing:5px; line-height:2em; }
@@ -26,11 +26,12 @@
             #chat aside ul li.lock:after { content:" 🔒"; }
       #chat main { display:flex; flex-flow:column nowrap; align-items:flex-start; flex-grow:2; }
         #chat main header { width:100%; padding:15px 20px; }
-          #chat main header #chat-connect { display:none; max-width:360px; margin:40px auto; padding:45px; text-align:center; box-shadow:0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24); }
+          #chat main header #chat-connect { display:none; max-width:400px; margin:40px auto; padding:45px; text-align:center; box-shadow:0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24); }
             #chat main header #chat-connect.active { display:block; }
-            #chat main header #chat-connect input { margin:0 0 15px; }
+            #chat main header #chat-connect #custom-keys { display:none; }
+              #chat main header #chat-connect #custom-keys.active { display:block; }
             #chat main header #chat-connect button { width:100%; padding:15px; }
-            #chat main header #chat-connect p { margin:15px 0 0; color:#b3b3b3; font-size:12px; }
+            #chat main header #chat-connect p { margin:20px 0 0; color:#b3b3b3; font-size:12px; }
           #chat main header #chat-localuser { display:none; border-bottom:2px solid #4CAF50; }
             #chat main header #chat-localuser h3 { display:inline-block; margin-right:10px; }
         #chat main .content { display:flex; flex-grow:2; width:100%; min-height:0; padding:0 20px; }
@@ -73,9 +74,16 @@
     <header>
       <div id="chat-connect">
         <h3>Connect to chat service</h3>
-        <input type="text" id="user" placeholder="Enter your name" onkeypress="CHAT.userEventHandlerKeypress(event)" autofocus>
-        <button id="chatInitButton" onclick="CHAT.chatInit(__WEBSOCKET_PORT_TOKEN__)">Connect</button>
-        <p>Only lowercase letters and digits, no spaces, no special characters, minimum 4 maximum 15 characters</p>
+        <p>
+          <input type="text" id="user" placeholder="Enter your name" onkeypress="CHAT.userEventHandlerKeypress(event)" autofocus><br>
+          Only lowercase letters and digits, no spaces, no special characters, minimum 4 maximum 15 characters
+        </p>
+        <div id="custom-keys">
+          <p><textarea id="custom-private-key" rows="5" placeholder="Private Key"></textarea><br>openssl genrsa -out private.pem 4096</p>
+          <p><textarea id="custom-public-key" rows="5" placeholder="Public Key"></textarea><br>openssl rsa -in private.pem -pubout -out public.pem</p>
+        </div>
+        <p><button id="chatInitButton" onclick="CHAT.chatInit(__WEBSOCKET_PORT_TOKEN__)">Connect</button></p>
+        <p><a onclick="CHAT.showCustomKeysFields(event);">Use custom keys</a></p>
       </div>
       <div id="chat-localuser">
         <h3 id="chat-localuser-name"></h3>

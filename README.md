@@ -42,19 +42,19 @@ And now, if you are still interested, the long part.
 ---
 
 ## Summary
- * [Server](#server)
-   * [HTTPS Web Server](#https-web-server)
-   * [SSH Port Forwarding](#ssh-port-forwarding)
-   * [How to run on smartphones](#how-to-run-on-smartphones)
-   * [Administrator interface](#administrator-interface)
-   * [Other parameters](#other-parameters)
- * [Client](#client)
- * [Encryption](#encryption)
-   * [*crypto.subtle* Javascript Web API restrictions](#cryptosubtle-javascript-web-api-restrictions)
-   * [Problems with HTTPS using self-signed SSL certificate](#problems-with-https-using-self-signed-ssl-certificate)
-   * [Encryption with openssl](#encryption-with-openssl)
- * [What you can learn here even if you don't care at all of a chat service](#what-you-can-learn-here-even-if-you-dont-care-at-all-of-a-chat-service)
- * [TODO](#todo)
+  * [Server](#server)
+    * [HTTPS Web Server](#https-web-server)
+    * [SSH Port Forwarding](#ssh-port-forwarding)
+    * [How to run on smartphones](#how-to-run-on-smartphones)
+    * [Administrator interface](#administrator-interface)
+    * [Other parameters](#other-parameters)
+  * [Client](#client)
+    * [Custom encryption keys](#custom-encryption-keys)
+  * [Encryption](#encryption)
+    * [*crypto.subtle* Javascript Web API restrictions](#cryptosubtle-javascript-web-api-restrictions)
+    * [Problems with HTTPS using self-signed SSL certificate](#problems-with-https-using-self-signed-ssl-certificate)
+    * [Encryption with openssl](#encryption-with-openssl)
+  * [What you can learn here even if you don't care at all of a chat service](#what-you-can-learn-here-even-though-you-dont-care-at-all-of-a-chat-service)
 
 ---
 
@@ -131,7 +131,7 @@ Dyspatcher has build-in features to help bypassing this problem via SSH Port For
 
 How to configure (and secure) an SSH server to accept tunneling connection is out-of-scope here.
 
-On the Dyspatcher side, the **ssh** client is required to be installed on the device, and keys for SSH Public Key Authentication are required.
+On the Dyspatcher side, the **ssh** client is required to be installed on the device, along with keys for SSH Public Key Authentication.
 
 SSH Port Forwarding can be configured with these options:
  * **--sshpfw-ip-address**: SSH server IP Address
@@ -191,7 +191,21 @@ Other available startup options are:
 
 ## Client
 
-The client is web based and runs on any modern desktop/mobile web browser.
+The client is web based and runs on any modern desktop/mobile web browser (via teh *crypto.subtle* Javascript Web API).
+
+
+### Custom encryption keys
+
+By default, on loading the Web Client generates new random encryption keys.
+
+It is possible to use custom key, generated manually. To set the custome keys, click on the *Use custom keys* link on the login form and enter the private and public keys along with the username you want to use.
+
+Encryption keys can be generated with *openssl*:
+
+```
+openssl genrsa -out private.pem 4096
+openssl rsa -in private.pem -pubout -out public.pem
+```
 
 ---
 
@@ -234,20 +248,10 @@ openssl pkeyutl -decrypt -inkey private.key -in message.enc -pkeyopt rsa_padding
 
 ---
 
-## What you can learn here even if you don't care at all of a chat service
+## What you can learn here even though you don't care at all of a chat service
 
 Here you can learn:
  - how to handle multiprocessing in Python
  - how to use Web Socket in Python and Javascript
  - how to implement a Web Server in Python to serve files and contents
  - how to use RSA cryptography in Python (*cryptography* module), JavaScript (*crypto.subtle* Web API) and OpenSSL (command line), and how to decrypt and verify the signature of messages encrypted and signed in different programming languages
-
----
-
-## TODO
-
- - improve SSH Port Forwarding configuration
- - SSH Port Forwarding now runs fine only on Linux with the *ssh* client installed in standard path
- - improve the chat web interface
- - add chat transcription (admin)
- - implement web interface for administrator

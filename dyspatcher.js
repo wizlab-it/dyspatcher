@@ -3,13 +3,15 @@ var CHAT = {
   SOCKET: null,
   USER: null,
   ADMIN: null,
-  OBJ_IDS: ["loading", "chat", "user", "chat-connect", "chat-localuser-name", "chat-userslist", "chat-localuser", "chat-message", "chat-message-txt", "userslist", "userslist-toggler", "chatInitButton", "receivedMessages"],
+  OBJ_IDS: ["loading", "chat", "user", "chat-connect", "chat-localuser-name", "chat-userslist", "chat-localuser", "chat-message", "chat-message-txt", "userslist", "userslist-toggler", "chatInitButton", "receivedMessages", "custom-keys", "custom-private-key", "custom-public-key"],
   OBJS: {},
   CONFIGS: null,
   CRYPTO: {
-    "config": { "name":"RSA-OAEP", "modulusLength":4096, "publicExponent": new Uint8Array([1, 0, 1]), "hash":"SHA-256" },
-    "sign": { "name":"RSA-PSS", "hash":"SHA-256", "saltLength":256 },
-    "keys": { "raw":null, "private":null, "privateSign":null, "public":null },
+    "config": {
+      "oaep": { "name":"RSA-OAEP", "modulusLength":4096, "publicExponent": new Uint8Array([1, 0, 1]), "hash":"SHA-256" },
+      "pss": { "name":"RSA-PSS", "hash":"SHA-256", "saltLength":256 },
+    },
+    "keys": { "objs":null, "pem":{} },
     "publickeyCache": {},
   },
 
@@ -46,7 +48,7 @@ var CHAT = {
   },
 
   // Init chat engine on "Connect" button click
-  chatInit: function(port, isSSL) {
+  chatInit: async function(port, isSSL) {
     // Check if user is ok
     if(CHAT.OBJS["user"].value.match(/^[a-z0-9]{4,15}$/) == null) {
       CHAT.printMessage("signal", "Invalid user. User must be 4-15 characters long, only lowercase letters and digits");
@@ -55,6 +57,16 @@ var CHAT = {
       return;
     }
     CHAT.USER = CHAT.OBJS["user"].value;
+
+    // Check if custom keys are set
+    let customPrivateKey = CHAT.OBJS["custom-private-key"].value.trim();
+    let customPublicKey = CHAT.OBJS["custom-public-key"].value.trim();
+    if(customPrivateKey || customPublicKey) {
+      if(!await CHAT.cryptoImportCustomKeys(customPrivateKey, customPublicKey)) {
+        CHAT.printMessage("signal", "Invalid custom keys");
+        return;
+      }
+    }
 
     // Open websocket and set listeners
     CHAT.SOCKET = new WebSocket("ws" + ((isSSL) ? "s" : "") + "://" + window.location.hostname + ":" + port);
@@ -72,7 +84,7 @@ var CHAT = {
 
   // WebSocket even handler: "open"
   websocketEventHandlerOpen: function(event) {
-    CHAT.sendCommand("signal", { "code":"chat-join", "publickey":CHAT.CRYPTO.keys.public });
+    CHAT.sendCommand("signal", { "code":"chat-join", "publickey":CHAT.CRYPTO.keys.pem.public });
     CHAT.setInterface(true);
   },
 
@@ -194,24 +206,68 @@ var CHAT = {
   cryptoGenKeys: function() {
     return new Promise((keysStatus) => {
       try {
-        window.crypto.subtle.generateKey(CHAT.CRYPTO.config, true, ["encrypt", "decrypt"]).then(keyPair => {
-          CHAT.CRYPTO.keys.raw = keyPair;
+        window.crypto.subtle.generateKey(CHAT.CRYPTO.config.oaep, true, ["encrypt", "decrypt"]).then(keyPair => {
+          CHAT.CRYPTO.keys.objs = keyPair;
 
           // Export private key
           window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey).then(privateKey => {
-            CHAT.CRYPTO.keys.private = window.btoa(CHAT.ab2str(privateKey));
+            CHAT.CRYPTO.keys.pem.private = window.btoa(CHAT.ab2str(privateKey));
 
             // Import private key for message signature
-            window.crypto.subtle.importKey("pkcs8", privateKey, CHAT.CRYPTO.sign, true, ["sign"]).then(privateSign => {
-              CHAT.CRYPTO.keys.privateSign = privateSign;
+            window.crypto.subtle.importKey("pkcs8", privateKey, CHAT.CRYPTO.config.pss, true, ["sign"]).then(signKey => {
+              CHAT.CRYPTO.keys.objs.signKey = signKey;
 
               // Export public key
               window.crypto.subtle.exportKey("spki", keyPair.publicKey).then(publicKey => {
-                CHAT.CRYPTO.keys.public = window.btoa(CHAT.ab2str(publicKey));
-              });
+                CHAT.CRYPTO.keys.pem.public = window.btoa(CHAT.ab2str(publicKey));
 
-              keysStatus(true);
-              return;
+                // End of keys generation
+                keysStatus(true);
+                return;
+              });
+            });
+          });
+        });
+      } catch(e) {
+        keysStatus(false);
+        return;
+      }
+    });
+  },
+
+  // Import Custom Keys
+  cryptoImportCustomKeys: function(privateKeyPem, publicKeyPem) {
+    return new Promise((keysStatus) => {
+      try {
+        // Convert PEM to binary
+        let privateKeyBin = CHAT.str2ab(window.atob(privateKeyPem.substring("-----BEGIN PRIVATE KEY-----".length, (privateKeyPem.length - "-----END PRIVATE KEY-----".length))));
+        let publicKeyBin = CHAT.str2ab(window.atob(publicKeyPem.substring("-----BEGIN PUBLIC KEY-----".length, (publicKeyPem.length - "-----END PUBLIC KEY-----".length))));
+
+        // Load private key
+        window.crypto.subtle.importKey("pkcs8", privateKeyBin, CHAT.CRYPTO.config.oaep, true, ["decrypt"]).then(privateKey => {
+          CHAT.CRYPTO.keys.objs.privateKey = privateKey;
+
+          // Load key for sign
+          window.crypto.subtle.importKey("pkcs8", privateKeyBin, CHAT.CRYPTO.config.pss, true, ["sign"]).then(signKey => {
+            CHAT.CRYPTO.keys.objs.signKey = signKey;
+
+            // Export private key
+            window.crypto.subtle.exportKey("pkcs8", privateKey).then(privateKey => {
+              CHAT.CRYPTO.keys.pem.private = window.btoa(CHAT.ab2str(privateKey));
+
+              // Load public key
+              window.crypto.subtle.importKey("spki", publicKeyBin, CHAT.CRYPTO.config.oaep, true, ["encrypt"]).then(publicKey => {
+                CHAT.CRYPTO.keys.objs.publicKey = publicKey;
+
+                // Export public key
+                window.crypto.subtle.exportKey("spki", publicKey).then(publicKey => {
+                  CHAT.CRYPTO.keys.pem.public = window.btoa(CHAT.ab2str(publicKey));
+
+                  // End of keys import
+                  keysStatus(true);
+                  return;
+                });
+              });
             });
           });
         });
@@ -224,10 +280,10 @@ var CHAT = {
 
   // Import public key
   cryptoImportPublicKey: function(hash, publickeyB64) {
-    publickeyRaw = CHAT.str2ab(window.atob(publickeyB64));
-    window.crypto.subtle.importKey("spki", publickeyRaw, CHAT.CRYPTO.config, true, ["encrypt"]).then(publickeyEncrypt => {
+    publickey = CHAT.str2ab(window.atob(publickeyB64));
+    window.crypto.subtle.importKey("spki", publickey, CHAT.CRYPTO.config.oaep, true, ["encrypt"]).then(publickeyEncrypt => {
       CHAT.CRYPTO.publickeyCache[hash] = { "encrypt":publickeyEncrypt };
-      window.crypto.subtle.importKey("spki", publickeyRaw, CHAT.CRYPTO.sign, true, ["verify"]).then(publickeyVerify => {
+      window.crypto.subtle.importKey("spki", publickey, CHAT.CRYPTO.config.pss, true, ["verify"]).then(publickeyVerify => {
         CHAT.CRYPTO.publickeyCache[hash]["verify"] = publickeyVerify;
       });
     });
@@ -249,9 +305,9 @@ var CHAT = {
   //Encrypt a message
   messageEncryptAndSend: function(publickey, message) {
     message = CHAT.str2ab(message);
-    window.crypto.subtle.encrypt({ "name":CHAT.CRYPTO.config.name }, publickey, message).then(messageEncrypted => {
+    window.crypto.subtle.encrypt({ "name":CHAT.CRYPTO.config.oaep.name }, publickey, message).then(messageEncrypted => {
       let messageEncryptedB64 = window.btoa(CHAT.ab2str(messageEncrypted));
-      window.crypto.subtle.sign(CHAT.CRYPTO.sign, CHAT.CRYPTO.keys.privateSign, message).then(signature => {
+      window.crypto.subtle.sign(CHAT.CRYPTO.config.pss, CHAT.CRYPTO.keys.objs.signKey, message).then(signature => {
         let signatureB64 = window.btoa(CHAT.ab2str(signature));
         CHAT.sendCommand("message", { "message":messageEncryptedB64, "signature":signatureB64 });
       });
@@ -260,12 +316,12 @@ var CHAT = {
 
   //Decrypt message and check signature
   messageDecryptAndPrint: function(message) {
-    window.crypto.subtle.decrypt({ "name":CHAT.CRYPTO.config.name }, CHAT.CRYPTO.keys.raw.privateKey, CHAT.str2ab(window.atob(message.message))).then(messagePlainAB => {
+    window.crypto.subtle.decrypt({ "name":CHAT.CRYPTO.config.oaep.name }, CHAT.CRYPTO.keys.objs.privateKey, CHAT.str2ab(window.atob(message.message))).then(messagePlainAB => {
       let messageStr = CHAT.ab2str(messagePlainAB);
       let messageObj = JSON.parse(messageStr);
       let publickey = CHAT.getUserPublicKey(messageObj.from);
       if(publickey && publickey.verify) {
-        window.crypto.subtle.verify(CHAT.CRYPTO.sign, publickey.verify, CHAT.str2ab(message.signature), CHAT.str2ab(messageStr)).then(() => {
+        window.crypto.subtle.verify(CHAT.CRYPTO.config.pss, publickey.verify, CHAT.str2ab(message.signature), CHAT.str2ab(messageStr)).then(() => {
           CHAT.printMessage("other", messageObj);
         });
       }
@@ -348,7 +404,7 @@ var CHAT = {
 
   // Userlist toggles button click handler
   userslistTogglerEventHandlerClick: function(event) {
-    CHAT.OBJS["userslist-toggler"].innerHTML = (CHAT.OBJS["chat"].classList.toggle('userslist-open')) ? "▲ Users list ▲" : "▼ Users list ▼";
+    CHAT.OBJS["userslist-toggler"].innerHTML = (CHAT.OBJS["chat"].classList.toggle("userslist-open")) ? "▲ Users list ▲" : "▼ Users list ▼";
   },
 
   // Set message destination (@username in message field)
@@ -446,6 +502,12 @@ var CHAT = {
     while(CHAT.OBJS["userslist"].firstChild) {
       CHAT.OBJS["userslist"].removeChild(userslist.firstChild);
     }
+  },
+
+  showCustomKeysFields: function(event) {
+    event.srcElement.innerHTML = (CHAT.OBJS["custom-keys"].classList.toggle("active")) ? "Use random keys" : "Use custom keys";
+    CHAT.OBJS["custom-private-key"].value = "";
+    CHAT.OBJS["custom-public-key"].value = "";
   }
 }
 
