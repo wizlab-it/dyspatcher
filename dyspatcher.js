@@ -89,9 +89,9 @@ var CHAT = {
   },
 
   // WebSocket even handler: "open"
+  // Interface "connected" is shown when config is recevied from the server
   websocketEventHandlerOpen: function(event) {
     CHAT.sendCommand("signal", { "code":"chat-join", "publickey":CHAT.CRYPTO.keys.pem.public });
-    CHAT.setInterface(true);
   },
 
   // WebSocket even handler: "close"
@@ -165,9 +165,12 @@ var CHAT = {
           // Save full configs
           CHAT.CONFIGS = payload.data;
 
-          // Store and show own key ID
+          // Store own username and key ID
+          CHAT.USER = payload.data.user;
           CHAT.CRYPTO.keys.keyid = payload.data.keyid;
-          CHAT.OBJS["chat-localuser-keyid"].innerHTML = CHAT.CRYPTO.keys.keyid.substr(0, 10);
+
+          // Show connected interface
+          CHAT.setInterface(true);
           break;
       }
     } catch { }
@@ -388,6 +391,8 @@ var CHAT = {
     if(isConnected) {
       CHAT.OBJS["chat-connect"].classList.remove("active");
       CHAT.OBJS["chat-localuser-name"].innerHTML = CHAT.USER;
+      CHAT.OBJS["chat-localuser-keyid"].innerHTML = CHAT.CRYPTO.keys.keyid.substr(0, 10);
+      CHAT.OBJS["chat-localuser-keyid"].title = "Full Key ID: " + CHAT.CRYPTO.keys.keyid;
       CHAT.OBJS["chat-userslist"].classList.add("active");
       CHAT.OBJS["chat-localuser"].style.display = "block";
       CHAT.OBJS["chat-message"].style.display = "flex";
@@ -509,6 +514,7 @@ var CHAT = {
     if(user == CHAT.USER) return;
     let userBlock = document.createElement("li");
     userBlock.id = "userslist-user-" + user;
+    userBlock.title = "Full Key ID: " + publickey.hash;
     userBlock.classList.add("userslist-user");
     userBlock.innerHTML = "<div class='user'>" + user + "</div><div class='keyid'>Key ID: " + publickey.hash.substr(0, 10) + "</div>";
     userBlock.dataset.user = user;

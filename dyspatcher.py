@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.8'
-BUILD = '20230325.102'
+BUILD = '20230326.104'
 ###########################################################
 
 import argparse
@@ -56,8 +56,10 @@ MISC_CONFIG = { 'welcome-message':None, 'disable-all':False, 'only-admin':False 
 # Text formats
 TXT_RED = '\033[31m'
 TXT_GREEN = '\033[32m'
-TXT_YELLOW = '\033[33m'
+TXT_ORANGE = '\033[33m'
 TXT_BLUE = '\033[34m'
+TXT_PURPLE = '\033[35m'
+TXT_CYAN = '\033[36m'
 TXT_BOLD = '\033[1m'
 TXT_ITALIC = '\033[3m'
 TXT_CLEAR = '\033[0m'
@@ -147,7 +149,7 @@ async def chatEngine(websocket):
                 keyhash = hashlib.sha256(payloadObj['data']['publickey'].encode('utf-8')).hexdigest()
                 keyRSA = serialization.load_pem_public_key(('-----BEGIN PUBLIC KEY-----\n' + payloadObj['data']['publickey'] + '\n-----END PUBLIC KEY-----').encode('utf-8'))
                 CLIENTS[websocketId] = { 'ws':websocket, 'user':payloadObj['user'], 'publickey': { 'hash':keyhash, 'text':payloadObj['data']['publickey'], 'rsa':keyRSA } }
-                printPrompt(TXT_YELLOW + TXT_ITALIC + payloadObj['user'] + ' joined chat' + TXT_CLEAR)
+                printPrompt(TXT_ORANGE + TXT_ITALIC + payloadObj['user'] + ' joined chat' + TXT_CLEAR)
                 if(MISC_CONFIG['only-admin'] == False):
                   await sendCommand('signal', payloadObj['user'], { 'code':'chat-join', 'publickey':{ 'hash':keyhash, 'text':payloadObj['data']['publickey'] } })
 
@@ -158,12 +160,12 @@ async def chatEngine(websocket):
                     userslist.append({'name':CLIENTS[c]['user'], 'publickey':{ 'hash':CLIENTS[c]['publickey']['hash'], 'text':CLIENTS[c]['publickey']['text'] } })
                 await sendCommand('signal', '', { 'code':'chat-userslist', 'userslist':json.dumps(userslist) }, [websocket])
 
+                # Send config
+                await sendCommand('config', '', { 'disable-all':MISC_CONFIG['disable-all'], 'user':CLIENTS[websocketId]['user'], 'keyid':keyhash }, [websocket])
+
                 # Send welcome message if set
                 if(MISC_CONFIG['welcome-message'] != None):
                   await sendMessage(ADMIN_NICKNAME, CLIENTS[websocketId], html.escape(MISC_CONFIG['welcome-message']))
-
-                # Send config
-                await sendCommand('config', '', { 'disable-all':MISC_CONFIG['disable-all'], 'keyid':keyhash }, [websocket])
 
               else:
                 await sendCommand('signal', '', { 'code':'chat-invaliduser' }, [websocket])
@@ -178,7 +180,7 @@ async def chatEngine(websocket):
     if websocketId in CLIENTS:
       user_tmp = CLIENTS[websocketId]['user']
       del CLIENTS[websocketId]
-      printPrompt(TXT_YELLOW + TXT_ITALIC + user_tmp + ' abandoned chat' + TXT_CLEAR)
+      printPrompt(TXT_ORANGE + TXT_ITALIC + user_tmp + ' abandoned chat' + TXT_CLEAR)
       await sendCommand('signal', user_tmp, { 'code':'chat-left' })
 
 
@@ -357,10 +359,10 @@ def promptProcessor():
         # Command: users - list all connected users
         case 'users':
           printPrompt('[i] Connected users:')
-          printPrompt('[i]   * ' + TXT_RED + ADMIN_NICKNAME + TXT_CLEAR + ' (🔒' + CRYPTO_CONFIG['publickey-hash'][:10] + ')')
+          printPrompt('[i]   * ' + TXT_RED + ADMIN_NICKNAME + TXT_CLEAR + ' (🔒' + TXT_CYAN + CRYPTO_CONFIG['publickey-hash'][:10] + TXT_CLEAR + CRYPTO_CONFIG['publickey-hash'][10:] + ')')
           cnt = 1
           for c in CLIENTS:
-            printPrompt('[i]   * ' + CLIENTS[c]['user'] + ((' (🔒' + CLIENTS[c]['publickey']['hash'][:10] + ')') if (CLIENTS[c]['publickey'] != None) else ''))
+            printPrompt('[i]   * ' + CLIENTS[c]['user'] + ((' (🔒' + TXT_CYAN + CLIENTS[c]['publickey']['hash'][:10] + TXT_CLEAR + CLIENTS[c]['publickey']['hash'][10:] + ')') if (CLIENTS[c]['publickey'] != None) else ''))
             cnt = cnt + 1
           printPrompt('[i] ' + str(cnt) + ' user' + ('s' if (cnt != 1) else '') + ' connected')
 
@@ -410,6 +412,7 @@ def promptProcessor():
 
       # Check destination and message
       destinations = []
+      isAllDestinations = False
       try:
         if(len(commandOrDestination) < 3):
           raise Exception("Destination too short")
@@ -423,6 +426,7 @@ def promptProcessor():
 
         # Check if a message for @all
         if(commandOrDestination == "all"):
+          isAllDestinations = True
           for c in CLIENTS:
             destinations.append(CLIENTS[c])
         else:
@@ -438,7 +442,7 @@ def promptProcessor():
       # Print message in console and sent it to the destination
       printPrompt(TXT_PREVLINE + 'From ' + TXT_RED + TXT_BOLD + ADMIN_NICKNAME + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + (commandOrDestination if (len(destinations) == 1) else '@all') + TXT_CLEAR + ': ' + message)
       for destination in destinations:
-        asyncio.run(sendMessage(ADMIN_NICKNAME, destination, message, True))
+        asyncio.run(sendMessage(ADMIN_NICKNAME, destination, message, isAllDestinations))
 
     # Invalid input
     case _:
