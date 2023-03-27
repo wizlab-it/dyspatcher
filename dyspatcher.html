@@ -26,6 +26,7 @@
               #chat aside ul li.lock div { pointer-events:none; }
                 #chat aside ul li.lock div.user:after { content:" 🔒"; }
                 #chat aside ul li.lock div.keyid { font-size:12px; color:#939393; }
+            #chat aside ul li.hide { display:none; }
       #chat main { display:flex; flex-flow:column nowrap; align-items:flex-start; flex-grow:2; }
         #chat main header { width:100%; padding:15px 20px; }
           #chat main header #chat-connect { display:none; max-width:400px; margin:40px auto; padding:45px; text-align:center; box-shadow:0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24); }
@@ -83,8 +84,8 @@
           Only lowercase letters and digits, no spaces, no special characters, minimum 4 maximum 15 characters
         </p>
         <div id="custom-keys">
-          <p><textarea id="custom-private-key" rows="5" placeholder="Private Key"></textarea><br>openssl genrsa -out private.pem 4096</p>
-          <p><textarea id="custom-public-key" rows="5" placeholder="Public Key"></textarea><br>openssl rsa -in private.pem -pubout -out public.pem</p>
+          <p><textarea id="custom-private-key" rows="4" placeholder="Private Key"></textarea><br>openssl genrsa -out private.pem 4096</p>
+          <p><textarea id="custom-public-key" rows="4" placeholder="Public Key"></textarea><br>openssl rsa -in private.pem -pubout -out public.pem</p>
         </div>
         <p><button id="chatInitButton" onclick="CHAT.chatInit(__WEBSOCKET_PORT_TOKEN__)">Connect</button></p>
         <p><a onclick="CHAT.showCustomKeysFields(event);">Use custom keys</a></p>

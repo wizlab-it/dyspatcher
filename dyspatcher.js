@@ -183,17 +183,22 @@ var CHAT = {
   },
 
   // Send message
-  sendMessage: function(destination, message, isAll=false) {
+  sendMessage: function(destination, message, allDestinationCounter=-1) {
     // If it's a message for @all, then generates one message for each destination and exists
     if(destination == "all") {
+
+      // If @all destination is disabled, then exists immediately
       if(CHAT.CONFIGS["disable-all"]) {
         CHAT.printMessage("signal", "You can't send messages to @all", true);
         return;
       }
+
+      // Generates message to @all
       let destinations = document.querySelectorAll(".userslist-user");
-      CHAT.printMessage("my", { "from":CHAT.USER, "to":"@all", "message":message });
       for(user of destinations) {
-        CHAT.sendMessage(user.dataset.user, message, true);
+        if(user.dataset.user == CHAT.USER) continue;
+        allDestinationCounter++;
+        CHAT.sendMessage(user.dataset.user, message, allDestinationCounter);
       }
       return;
     }
@@ -201,9 +206,18 @@ var CHAT = {
     // If destination public key is available, then encrypt the message and send it and print the send message in local chat
     let publickey = CHAT.getUserPublicKey(destination);
     if(publickey && publickey["encrypt"]) {
-      let msgPayload = { "from":CHAT.USER, "to":((isAll) ? "@all" : destination), "message":message };
-      if(!isAll) CHAT.printMessage("my", msgPayload);
+      let msgPayload = { "from":CHAT.USER, "to":((allDestinationCounter >= 0) ? "@all" : destination), "message":message };
       CHAT.messageEncryptAndSend(publickey["encrypt"], JSON.stringify(msgPayload));
+
+      // If it's a single-destination message (-1), or the first of an @all-destination (0), then print the local copy and send the server copy
+      if(allDestinationCounter <= 0) {
+        CHAT.printMessage("my", msgPayload);
+
+        // If user is admin web, then send message to server to show it in local chat
+        if(CHAT.CONFIGS["is-admin"]) {
+          CHAT.messageEncryptAndSend(CHAT.CRYPTO.keys.objs.publicKey, JSON.stringify(msgPayload));
+        }
+      }
     } else {
       CHAT.printMessage("signal", "Unknown destination or missing encryption key", true);
     }
@@ -363,7 +377,7 @@ var CHAT = {
           CHAT.printMessage("other", messageObj);
         });
       }
-    }).catch(e => {});
+    }).catch(e => { });
   },
 
   // Convert array buffer to string
@@ -457,6 +471,17 @@ var CHAT = {
 
   // Print received message
   printMessage: function(type, message, clearMessageTxtInputField=false) {
+    // Check first if the message is the local copy of an admin message sent from the server, and if yes mangle the message accordingly
+    if(CHAT.CONFIGS["is-admin"] && (type == "other") && (message.from == CHAT.USER)) {
+      try {
+        message.message = JSON.parse(message.message);
+        message = { "from":message.from, "to":message.message.to + " (via server)", "message":message.message.message };
+        type = "my";
+      } catch(e) {
+        return;
+      }
+    }
+
     // Message block
     let msgBlock = document.createElement("li");
     msgBlock.className = "clearfix";
@@ -511,11 +536,11 @@ var CHAT = {
 
   // Add user to list
   userslistAdd: function(user, publickey) {
-    if(user == CHAT.USER) return;
     let userBlock = document.createElement("li");
     userBlock.id = "userslist-user-" + user;
     userBlock.title = "Full Key ID: " + publickey.hash;
     userBlock.classList.add("userslist-user");
+    if(user == CHAT.USER) userBlock.classList.add("hide");
     userBlock.innerHTML = "<div class='user'>" + user + "</div><div class='keyid'>Key ID: " + publickey.hash.substr(0, 10) + "</div>";
     userBlock.dataset.user = user;
     if(((typeof publickey) === "object") && (publickey.text != "")) {

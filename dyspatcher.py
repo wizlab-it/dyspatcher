@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.8'
-BUILD = '20230326.104'
+BUILD = '20230327.107'
 ###########################################################
 
 import argparse
@@ -44,6 +44,7 @@ WEBSERVER_PORT = 80
 WEBSOCKET_PORT = 81
 WEBSERVER_SSL_CONFIG = None
 ADMIN_NICKNAME = 'ADMIN'
+ADMIN_WEBSOCKET = False
 SSH_PFW_CONFIG = None
 CRYPTO_CONFIG = { }
 MISC_CONFIG = { 'welcome-message':None, 'disable-all':False, 'only-admin':False }
@@ -119,7 +120,8 @@ class ChatWebServer(BaseHTTPRequestHandler):
 # Chat Engine
 #
 async def chatEngine(websocket):
-  websocketId = str(websocket.id);
+  global ADMIN_WEBSOCKET
+  websocketId = str(websocket.id)
 
   # Add new client to the list of clients and process communication
   try:
@@ -144,32 +146,62 @@ async def chatEngine(websocket):
 
             # Signal is an user that joined the chat
             case 'chat-join':
-              # Check if user is valid, if yes approve connection
-              if(re.compile('^[a-z0-9]{4,15}$').match(payloadObj['user']) and isUserValid(payloadObj['user'])):
+              try:
+
+                # Check if user is valid
+                if((not re.compile('^[a-z0-9]{4,15}$').match(payloadObj['user'])) or (not isUserValid(payloadObj['user']))):
+                  await sendCommand('signal', '', { 'code':'chat-invaliduser' }, [websocket])
+                  await websocket.close()
+                  raise Exception("Invalid username")
+
+                # Process key
                 keyhash = hashlib.sha256(payloadObj['data']['publickey'].encode('utf-8')).hexdigest()
                 keyRSA = serialization.load_pem_public_key(('-----BEGIN PUBLIC KEY-----\n' + payloadObj['data']['publickey'] + '\n-----END PUBLIC KEY-----').encode('utf-8'))
-                CLIENTS[websocketId] = { 'ws':websocket, 'user':payloadObj['user'], 'publickey': { 'hash':keyhash, 'text':payloadObj['data']['publickey'], 'rsa':keyRSA } }
-                printPrompt(TXT_ORANGE + TXT_ITALIC + payloadObj['user'] + ' joined chat' + TXT_CLEAR)
-                if(MISC_CONFIG['only-admin'] == False):
-                  await sendCommand('signal', payloadObj['user'], { 'code':'chat-join', 'publickey':{ 'hash':keyhash, 'text':payloadObj['data']['publickey'] } })
+
+                # If the public key hash is the same of the admin public key hash, then the connected client is the admin via web interface
+                if(CRYPTO_CONFIG['publickey-hash'] == keyhash):
+
+                  # If there is another admin via web then reject the connection
+                  if(ADMIN_WEBSOCKET != False):
+                    await sendCommand('signal', '', { 'code':'notice', 'notice':'Admin is already connected via web interface' }, [websocket])
+                    await websocket.close()
+                    raise Exception("Admin is already connected via web")
+
+                  # Set the isAdmin flag and change the username to the admin username
+                  payloadObj['user'] = ADMIN_NICKNAME
+                  ADMIN_WEBSOCKET = websocketId
+
+                # Create entry in clients list
+                CLIENTS[websocketId] = { 'ws':websocket, 'user':payloadObj['user'], 'isAdmin':(True if (ADMIN_WEBSOCKET == websocketId) else False), 'publickey': { 'hash':keyhash, 'text':payloadObj['data']['publickey'], 'rsa':keyRSA } }
+
+                # Send config
+                await sendCommand('config', '', { 'disable-all':MISC_CONFIG['disable-all'], 'user':CLIENTS[websocketId]['user'], 'is-admin':CLIENTS[websocketId]['isAdmin'], 'keyid':keyhash }, [websocket])
 
                 # Send users list
                 userslist = [ {'name':ADMIN_NICKNAME, 'publickey':{ 'hash':CRYPTO_CONFIG['publickey-hash'], 'text':CRYPTO_CONFIG['publickey-text'] } } ]
-                if(MISC_CONFIG['only-admin'] == False):
+                # Add normal users to the list only if only-admin flag is not set OR user is the admin via web
+                if((MISC_CONFIG['only-admin'] == False) or CLIENTS[websocketId]['isAdmin']):
                   for c in CLIENTS:
+                    # Exclude admin via web from users list
+                    if(CRYPTO_CONFIG['publickey-hash'] == CLIENTS[c]['publickey']['hash']):
+                      continue
                     userslist.append({'name':CLIENTS[c]['user'], 'publickey':{ 'hash':CLIENTS[c]['publickey']['hash'], 'text':CLIENTS[c]['publickey']['text'] } })
                 await sendCommand('signal', '', { 'code':'chat-userslist', 'userslist':json.dumps(userslist) }, [websocket])
-
-                # Send config
-                await sendCommand('config', '', { 'disable-all':MISC_CONFIG['disable-all'], 'user':CLIENTS[websocketId]['user'], 'keyid':keyhash }, [websocket])
 
                 # Send welcome message if set
                 if(MISC_CONFIG['welcome-message'] != None):
                   await sendMessage(ADMIN_NICKNAME, CLIENTS[websocketId], html.escape(MISC_CONFIG['welcome-message']))
 
-              else:
-                await sendCommand('signal', '', { 'code':'chat-invaliduser' }, [websocket])
-                await websocket.close()
+                # Send join notification to everybody, if only-admin flag is not set and connected user is not admin via web
+                if((MISC_CONFIG['only-admin'] == False) and (not CLIENTS[websocketId]['isAdmin'])):
+                  await sendCommand('signal', payloadObj['user'], { 'code':'chat-join', 'publickey':{ 'hash':keyhash, 'text':payloadObj['data']['publickey'] } })
+
+                # Show notification on admin interface
+                printPrompt(TXT_ORANGE + TXT_ITALIC + CLIENTS[websocketId]['user'] + ' joined chat' + TXT_CLEAR)
+
+              except:
+                pass
+
 
   # Required to handle websocket error on disconnecting client
   except(websockets.exceptions.ConnectionClosedError):
@@ -180,8 +212,11 @@ async def chatEngine(websocket):
     if websocketId in CLIENTS:
       user_tmp = CLIENTS[websocketId]['user']
       del CLIENTS[websocketId]
+      if(websocketId == ADMIN_WEBSOCKET):
+        ADMIN_WEBSOCKET = False
+      else:
+        await sendCommand('signal', user_tmp, { 'code':'chat-left' })
       printPrompt(TXT_ORANGE + TXT_ITALIC + user_tmp + ' abandoned chat' + TXT_CLEAR)
-      await sendCommand('signal', user_tmp, { 'code':'chat-left' })
 
 
 #
@@ -192,7 +227,7 @@ async def processMessage(websocket, user, data):
   if(message == ''):
     return
 
-  # Try to decrypt the message, if it works the message is for admin, so do not forward to other users
+  # Try to decrypt the message
   messageDecoded = False
   try:
     client = getClientByUser(user)
@@ -205,7 +240,14 @@ async def processMessage(websocket, user, data):
     try:
       client['publickey']['rsa'].verify(signatureBinary, messageDecoded.encode('latin1'), padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())
       messageObj = json.loads(messageDecoded)
-      printPrompt('From ' + TXT_GREEN + TXT_BOLD + messageObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
+
+      # Check if the received message is just the server copy of a message sent from the admin via web interface
+      if(messageObj['from'] == ADMIN_NICKNAME):
+        printPrompt('From ' + TXT_RED + TXT_BOLD + messageObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
+        return
+      else:
+        printPrompt('From ' + TXT_GREEN + TXT_BOLD + messageObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
+
     except:
       pass
 
@@ -213,8 +255,7 @@ async def processMessage(websocket, user, data):
     pass
 
   finally:
-    if(messageDecoded == False):
-      await sendCommand('message', '', { 'message':message, 'signature':data['signature'] } )
+    await sendCommand('message', '', { 'message':message, 'signature':data['signature'] } )
 
 
 #
@@ -341,6 +382,8 @@ def initSSHPFW():
 #
 
 def promptProcessor():
+  global ADMIN_WEBSOCKET
+
   promptInput = input()
   promptInput = promptInput.strip()
   if(promptInput == ''):
@@ -443,6 +486,10 @@ def promptProcessor():
       printPrompt(TXT_PREVLINE + 'From ' + TXT_RED + TXT_BOLD + ADMIN_NICKNAME + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + (commandOrDestination if (len(destinations) == 1) else '@all') + TXT_CLEAR + ': ' + message)
       for destination in destinations:
         asyncio.run(sendMessage(ADMIN_NICKNAME, destination, message, isAllDestinations))
+
+      # If there is a admin via web, then send its copy
+      if(ADMIN_WEBSOCKET != False):
+        asyncio.run(sendMessage(ADMIN_NICKNAME, CLIENTS[ADMIN_WEBSOCKET], json.dumps({'message':message, 'to':('@all' if isAllDestinations else destination['user'])})))
 
     # Invalid input
     case _:
