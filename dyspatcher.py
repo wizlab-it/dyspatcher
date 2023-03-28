@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.8'
-BUILD = '20230327.107'
+BUILD = '20230328.110'
 ###########################################################
 
 import argparse
@@ -254,28 +254,37 @@ async def processMessage(websocket, user, data):
   except:
     pass
 
-  finally:
-    await sendCommand('message', '', { 'message':message, 'signature':data['signature'] } )
+  # Finally, forward the message to the clients
+  await sendCommand('message', '', { 'message':message, 'signature':data['signature'] } )
 
 
 #
 # Dispatch the command to clients
 #
 async def sendCommand(cmd, user, data, wss=False):
-  payload = json.dumps({ 'cmd':cmd, 'user':user, 'data':data })
-  if(wss):
-    for ws in wss:
-      await ws.send(payload)
-  else:
+  # If no wss specified, then build wss list with all clients
+  if(wss == False):
+    wss = []
     for c in CLIENTS:
-      await CLIENTS[c]['ws'].send(payload)
+      wss.append(CLIENTS[c]['ws'])
+
+  # Send payload to wss list
+  payload = json.dumps({ 'cmd':cmd, 'user':user, 'data':data })
+  for ws in wss:
+    await ws.send(payload)
 
 
 #
 # Send message
 #
-async def sendMessage(sender, destination, message, isAll=False):
-  payload = json.dumps({ 'from':sender, 'to':(destination['user'] if (isAll == False) else '@all'), 'message':message }).encode('utf-8')
+async def sendMessage(sender, destination, message, flags={}):
+  # Build payload
+  payload = { 'from':sender, 'to':destination['user'], 'message':message }
+  if(('isAll' in flags) and flags['isAll']): payload['to'] = '@all'
+  if(('isCopy' in flags) and flags['isCopy']): payload['isCopy'] = True
+
+  # Pack payload, encrypt, sign and send
+  payload = json.dumps(payload).encode('utf-8')
   signature = base64.b64encode(CRYPTO_CONFIG['privatekey'].sign(payload, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())).decode('utf-8')
   payloadRSA = base64.b64encode(destination['publickey']['rsa'].encrypt(payload, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))).decode('utf-8')
   await sendCommand('message', '', { 'message':payloadRSA, 'signature':signature }, [destination['ws']])
@@ -402,7 +411,7 @@ def promptProcessor():
         # Command: users - list all connected users
         case 'users':
           printPrompt('[i] Connected users:')
-          printPrompt('[i]   * ' + TXT_RED + ADMIN_NICKNAME + TXT_CLEAR + ' (🔒' + TXT_CYAN + CRYPTO_CONFIG['publickey-hash'][:10] + TXT_CLEAR + CRYPTO_CONFIG['publickey-hash'][10:] + ')')
+          printPrompt('[i]   * ' + TXT_RED + TXT_BOLD + ADMIN_NICKNAME + TXT_CLEAR + ' (🔒' + TXT_CYAN + CRYPTO_CONFIG['publickey-hash'][:10] + TXT_CLEAR + CRYPTO_CONFIG['publickey-hash'][10:] + ')')
           cnt = 1
           for c in CLIENTS:
             printPrompt('[i]   * ' + CLIENTS[c]['user'] + ((' (🔒' + TXT_CYAN + CLIENTS[c]['publickey']['hash'][:10] + TXT_CLEAR + CLIENTS[c]['publickey']['hash'][10:] + ')') if (CLIENTS[c]['publickey'] != None) else ''))
@@ -455,7 +464,7 @@ def promptProcessor():
 
       # Check destination and message
       destinations = []
-      isAllDestinations = False
+      flags = {}
       try:
         if(len(commandOrDestination) < 3):
           raise Exception("Destination too short")
@@ -469,7 +478,7 @@ def promptProcessor():
 
         # Check if a message for @all
         if(commandOrDestination == "all"):
-          isAllDestinations = True
+          flags['isAll'] = True
           for c in CLIENTS:
             destinations.append(CLIENTS[c])
         else:
@@ -482,14 +491,15 @@ def promptProcessor():
         printPrompt('[-] ' + str(e))
         return
 
+      # If there is a admin via web, then send its copy
+      if(ADMIN_WEBSOCKET != False):
+        webCopyPayload = { 'message':message, 'to':('@all' if (('isAll' in flags) and flags['isAll']) else destination['user']) }
+        asyncio.run(sendMessage(ADMIN_NICKNAME, CLIENTS[ADMIN_WEBSOCKET], json.dumps(webCopyPayload), {'isCopy':True}))
+
       # Print message in console and sent it to the destination
       printPrompt(TXT_PREVLINE + 'From ' + TXT_RED + TXT_BOLD + ADMIN_NICKNAME + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + (commandOrDestination if (len(destinations) == 1) else '@all') + TXT_CLEAR + ': ' + message)
       for destination in destinations:
-        asyncio.run(sendMessage(ADMIN_NICKNAME, destination, message, isAllDestinations))
-
-      # If there is a admin via web, then send its copy
-      if(ADMIN_WEBSOCKET != False):
-        asyncio.run(sendMessage(ADMIN_NICKNAME, CLIENTS[ADMIN_WEBSOCKET], json.dumps({'message':message, 'to':('@all' if isAllDestinations else destination['user'])})))
+        asyncio.run(sendMessage(ADMIN_NICKNAME, destination, message, flags))
 
     # Invalid input
     case _:

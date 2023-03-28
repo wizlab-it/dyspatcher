@@ -188,7 +188,7 @@ var CHAT = {
     if(destination == "all") {
 
       // If @all destination is disabled, then exists immediately
-      if(CHAT.CONFIGS["disable-all"]) {
+      if(CHAT.CONFIGS["disable-all"] && !CHAT.CONFIGS["is-admin"]) {
         CHAT.printMessage("signal", "You can't send messages to @all", true);
         return;
       }
@@ -214,7 +214,7 @@ var CHAT = {
         CHAT.printMessage("my", msgPayload);
 
         // If user is admin web, then send message to server to show it in local chat
-        if(CHAT.CONFIGS["is-admin"]) {
+        if(CHAT.CONFIGS["is-admin"] && (destination != CHAT.ADMIN)) {
           CHAT.messageEncryptAndSend(CHAT.CRYPTO.keys.objs.publicKey, JSON.stringify(msgPayload));
         }
       }
@@ -472,13 +472,14 @@ var CHAT = {
   // Print received message
   printMessage: function(type, message, clearMessageTxtInputField=false) {
     // Check first if the message is the local copy of an admin message sent from the server, and if yes mangle the message accordingly
-    if(CHAT.CONFIGS["is-admin"] && (type == "other") && (message.from == CHAT.USER)) {
-      try {
+    if(CHAT.CONFIGS["is-admin"]) {
+      if(message.isCopy) {
         message.message = JSON.parse(message.message);
+        if(message.message.to == CHAT.ADMIN) return;
         message = { "from":message.from, "to":message.message.to + " (via server)", "message":message.message.message };
         type = "my";
-      } catch(e) {
-        return;
+      } else {
+        if((message.from == CHAT.ADMIN) && (message.to != CHAT.ADMIN) && (type == "other")) return;
       }
     }
 
@@ -508,7 +509,8 @@ var CHAT = {
     msgMessage.classList.add("message");
     msgMessage.classList.add(type);
     if(typeof message === "object") {
-      if((message.from == CHAT.ADMIN) || (message.to == CHAT.ADMIN)) msgMessage.classList.add("admin");
+      if((message.from == CHAT.ADMIN) && (message.to == CHAT.ADMIN)) msgMessage.classList.add("admin2admin");
+      else if((message.from == CHAT.ADMIN) || (message.to == CHAT.ADMIN)) msgMessage.classList.add("admin");
 
       // If it's a signal then print as HTML, if message add as text node
       if((type == "signal")) {
@@ -540,7 +542,7 @@ var CHAT = {
     userBlock.id = "userslist-user-" + user;
     userBlock.title = "Full Key ID: " + publickey.hash;
     userBlock.classList.add("userslist-user");
-    if(user == CHAT.USER) userBlock.classList.add("hide");
+    if((user == CHAT.USER) && (user != CHAT.ADMIN)) userBlock.classList.add("hide");
     userBlock.innerHTML = "<div class='user'>" + user + "</div><div class='keyid'>Key ID: " + publickey.hash.substr(0, 10) + "</div>";
     userBlock.dataset.user = user;
     if(((typeof publickey) === "object") && (publickey.text != "")) {
@@ -565,8 +567,20 @@ var CHAT = {
 
   // Clear users list
   userslistClear: function() {
+    // Remove all destination
     while(CHAT.OBJS["userslist"].firstChild) {
       CHAT.OBJS["userslist"].removeChild(userslist.firstChild);
+    }
+
+    // Add @all destination
+    if(!CHAT.CONFIGS["disable-all"] || CHAT.CONFIGS["is-admin"]) {
+      let userBlock = document.createElement("li");
+      userBlock.innerHTML = "<div class='user'>@all</div>";
+      userBlock.classList.add("lock");
+      userBlock.addEventListener("click", function(event) {
+        CHAT.setMessageDestination("all");
+      });
+      CHAT.OBJS["userslist"].appendChild(userBlock);
     }
   },
 
