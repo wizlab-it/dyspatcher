@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.8'
-BUILD = '20230328.111'
+BUILD = '20230328.113'
 ###########################################################
 
 import argparse
@@ -192,9 +192,16 @@ async def chatEngine(websocket):
                 if(MISC_CONFIG['welcome-message'] != None):
                   await sendMessage(ADMIN_NICKNAME, CLIENTS[websocketId], html.escape(MISC_CONFIG['welcome-message']))
 
-                # Send join notification to everybody, if only-admin flag is not set and connected user is not admin via web
-                if((MISC_CONFIG['only-admin'] == False) and (not CLIENTS[websocketId]['isAdmin'])):
-                  await sendCommand('signal', payloadObj['user'], { 'code':'chat-join', 'publickey':{ 'hash':keyhash, 'text':payloadObj['data']['publickey'] } })
+                # If connected client is not admin via web, che if to send the join notification
+                if(not CLIENTS[websocketId]['isAdmin']):
+                  joinNotificationPayload = { 'code':'chat-join', 'publickey':{ 'hash':keyhash, 'text':payloadObj['data']['publickey'] } }
+
+                  # If only-admin flag is set then send only to the admin via web (if any), otherwise send to everybody
+                  if(MISC_CONFIG['only-admin']):
+                    if(ADMIN_WEBSOCKET != False):
+                      await sendCommand('signal', payloadObj['user'], joinNotificationPayload, [CLIENTS[ADMIN_WEBSOCKET]['ws']])
+                  else:
+                    await sendCommand('signal', payloadObj['user'], joinNotificationPayload)
 
                 # Show notification on admin interface
                 printPrompt(TXT_ORANGE + TXT_ITALIC + CLIENTS[websocketId]['user'] + ' joined chat' + TXT_CLEAR)
