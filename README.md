@@ -47,6 +47,7 @@ And now, if you are still interested, the long part.
     * [SSH Port Forwarding](#ssh-port-forwarding)
     * [How to run on smartphones](#how-to-run-on-smartphones)
     * [Administrator interface](#administrator-interface)
+    * [Administrator encryption keys](#administrator-encryption-keys)
     * [Other parameters](#other-parameters)
   * [Client](#client)
     * [Custom encryption keys](#custom-encryption-keys)
@@ -179,7 +180,14 @@ Messages can be sent to users entering the **@** (at) character followed by the 
 The administrator username is by default **ADMIN**. Administrator username can be customized with:
  * **-n**, **--admin-nickname**: Admin nickname, minimum 4 characters, maximum 15, only numbers or uppercase characters.
 
-By default, at startup a new RSA key is automatically generated for the administrator. It is possible to use a custom private key (generated with *openssl* or extracted from a previous session) specifying the file with **--admin-private-key**
+Administrator username is always all uppercase, whilst normal users usernames are all lowercase (plus digits).
+
+
+### Administrator encryption keys
+
+By default, at startup a new RSA key is automatically generated for the administrator.
+
+It is possible to use a custom private key (generated with *openssl* or extracted from a previous session) specifying the file with **--admin-private-key**
 
 Example:
 
@@ -193,7 +201,6 @@ python dyspatcher.py --admin-private-key private.pem
 
 The public key is automatically calculated from the private key.
 
-Administrator username is always all uppercase, whilst normal users usernames are all lowercase (plus digits).
 
 
 ### Other parameters
