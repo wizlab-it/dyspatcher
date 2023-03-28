@@ -50,6 +50,7 @@ And now, if you are still interested, the long part.
     * [Other parameters](#other-parameters)
   * [Client](#client)
     * [Custom encryption keys](#custom-encryption-keys)
+    * [Client web interface for administrator](#client-web-interface-for-administrator)
   * [Encryption](#encryption)
     * [*crypto.subtle* Javascript Web API restrictions](#cryptosubtle-javascript-web-api-restrictions)
     * [Problems with HTTPS using self-signed SSL certificate](#problems-with-https-using-self-signed-ssl-certificate)
@@ -164,15 +165,16 @@ pip install cryptography
 
 ### Administrator interface
 
-The administrator interface is available via command line prompt.
+The administrator interface is available via command line prompt. The chat interface for administrator is also available via web, please see [Client web interface for administrator](#client-web-interface-for-administrator)
 
-Commands start with the character **/**. Available commands are:
+Commands start with the character **/** (slash). Available commands are:
  * **/users**: list connected users
  * **/kick [username]**: force disconnection of an user
+ * **/key [private/public]**: export private/public chat encryption keys
  * **/help**: show help
  * **/quit**: closes all the active connection and stops the service
 
-Messages can be sent to users entering the **@** character followed by the username, a space and then the message (example ```@yoda Hi Yoda!```). Administrator is always allowed to send messages to everybody at once with **@all**
+Messages can be sent to users entering the **@** (at) character followed by the username, a space and then the message (example ```@yoda Hi Yoda!```). Administrator is always allowed to send messages to everybody at once with **@all**
 
 The administrator username is by default **ADMIN**. Administrator username can be customized with:
  * **-n**, **--admin-nickname**: Admin nickname, minimum 4 characters, maximum 15, only numbers or uppercase characters.
@@ -206,6 +208,22 @@ Encryption keys can be generated with *openssl*:
 openssl genrsa -out private.pem 4096
 openssl rsa -in private.pem -pubout -out public.pem
 ```
+
+### Client web interface for administrator
+
+Administrator can chat via web interface too. To connect to the web interface as administrator, follow these steps:
+ - export the private and public key from the standard command line interface with command **/key**
+ - open the web chat interface
+ - set any username
+ - click on *Use custom keys* and enter the administrator keys previously exported from the server
+ - click *Connect*
+
+Now the web client is connected to the chat service as administrator. The username in the interface is changed accordingly to the administrator username set when the service was started.
+
+Every message sent or received from the standard command line prompt interface or the client web interface is reflected on the other part. Sent messages show from which interface they were sent. Direct *Admin-to-Admin* messages are allowed between the two interfaces.
+
+Only one administrator can be connected via the web client at any time.
+
 
 ---
 

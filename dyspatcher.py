@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.8'
-BUILD = '20230328.110'
+BUILD = '20230328.111'
 ###########################################################
 
 import argparse
@@ -242,7 +242,7 @@ async def processMessage(websocket, user, data):
       messageObj = json.loads(messageDecoded)
 
       # Check if the received message is just the server copy of a message sent from the admin via web interface
-      if(messageObj['from'] == ADMIN_NICKNAME):
+      if((('isCopy' in messageObj) and messageObj['isCopy']) or (messageObj['from'] == ADMIN_NICKNAME)):
         printPrompt('From ' + TXT_RED + TXT_BOLD + messageObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
         return
       else:

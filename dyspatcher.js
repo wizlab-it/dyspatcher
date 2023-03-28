@@ -215,6 +215,7 @@ var CHAT = {
 
         // If user is admin web, then send message to server to show it in local chat
         if(CHAT.CONFIGS["is-admin"] && (destination != CHAT.ADMIN)) {
+          msgPayload.isCopy = true;
           CHAT.messageEncryptAndSend(CHAT.CRYPTO.keys.objs.publicKey, JSON.stringify(msgPayload));
         }
       }
