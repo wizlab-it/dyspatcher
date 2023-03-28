@@ -179,6 +179,20 @@ Messages can be sent to users entering the **@** (at) character followed by the 
 The administrator username is by default **ADMIN**. Administrator username can be customized with:
  * **-n**, **--admin-nickname**: Admin nickname, minimum 4 characters, maximum 15, only numbers or uppercase characters.
 
+By default, at startup a new RSA key is automatically generated for the administrator. It is possible to use a custom private key (generated with *openssl* or extracted from a previous session) specifying the file with **--admin-private-key**
+
+Example:
+
+```
+# Generate a custom private key
+openssl genrsa -out private.pem 4096
+
+# Start the service using the custom private key
+python dyspatcher.py --admin-private-key private.pem
+```
+
+The public key is automatically calculated from the private key.
+
 Administrator username is always all uppercase, whilst normal users usernames are all lowercase (plus digits).
 
 
@@ -211,7 +225,9 @@ openssl rsa -in private.pem -pubout -out public.pem
 
 ### Client web interface for administrator
 
-Administrator can chat via web interface too. To connect to the web interface as administrator, follow these steps:
+Administrator can chat via web interface.
+
+To connect to the web interface as administrator, follow these steps:
  - export the private and public key from the standard command line interface with command **/key**
  - open the web chat interface
  - set any username
@@ -231,7 +247,7 @@ Only one administrator can be connected via the web client at any time.
 
 Encryption uses RSA-OAEP, and signature uses RSA-PSS with SHA256.
 
-The server generates the local (administrator) keys when started.
+The server generates by default the local (administrator) keys when started. Custom keys can be used specifying the Private Key file with **--admin-private-key** (see [Administrator interface](#administrator-interface))
 
 When a chat client is opened (in the web browser), the encryption keys are generated. When connecting to the service, the public key is sent and shared with the other connected users (unless the *--only-admin* switch is set when starting the server).
 

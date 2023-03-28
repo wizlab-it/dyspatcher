@@ -43,8 +43,7 @@ WEBSERVER_IP = '127.0.0.1'
 WEBSERVER_PORT = 80
 WEBSOCKET_PORT = 81
 WEBSERVER_SSL_CONFIG = None
-ADMIN_NICKNAME = 'ADMIN'
-ADMIN_WEBSOCKET = False
+ADMIN = { 'nickname':'ADMIN', 'ws':False, 'custom-private-key':False }
 SSH_PFW_CONFIG = None
 CRYPTO_CONFIG = { }
 MISC_CONFIG = { 'welcome-message':None, 'disable-all':False, 'only-admin':False }
@@ -120,7 +119,6 @@ class ChatWebServer(BaseHTTPRequestHandler):
 # Chat Engine
 #
 async def chatEngine(websocket):
-  global ADMIN_WEBSOCKET
   websocketId = str(websocket.id)
 
   # Add new client to the list of clients and process communication
@@ -162,23 +160,23 @@ async def chatEngine(websocket):
                 if(CRYPTO_CONFIG['publickey-hash'] == keyhash):
 
                   # If there is another admin via web then reject the connection
-                  if(ADMIN_WEBSOCKET != False):
+                  if(ADMIN['ws'] != False):
                     await sendCommand('signal', '', { 'code':'notice', 'notice':'Admin is already connected via web interface' }, [websocket])
                     await websocket.close()
                     raise Exception("Admin is already connected via web")
 
                   # Set the isAdmin flag and change the username to the admin username
-                  payloadObj['user'] = ADMIN_NICKNAME
-                  ADMIN_WEBSOCKET = websocketId
+                  payloadObj['user'] = ADMIN['nickname']
+                  ADMIN['ws'] = websocketId
 
                 # Create entry in clients list
-                CLIENTS[websocketId] = { 'ws':websocket, 'user':payloadObj['user'], 'isAdmin':(True if (ADMIN_WEBSOCKET == websocketId) else False), 'publickey': { 'hash':keyhash, 'text':payloadObj['data']['publickey'], 'rsa':keyRSA } }
+                CLIENTS[websocketId] = { 'ws':websocket, 'user':payloadObj['user'], 'isAdmin':(True if (ADMIN['ws'] == websocketId) else False), 'publickey': { 'hash':keyhash, 'text':payloadObj['data']['publickey'], 'rsa':keyRSA } }
 
                 # Send config
                 await sendCommand('config', '', { 'disable-all':MISC_CONFIG['disable-all'], 'user':CLIENTS[websocketId]['user'], 'is-admin':CLIENTS[websocketId]['isAdmin'], 'keyid':keyhash }, [websocket])
 
                 # Send users list
-                userslist = [ {'name':ADMIN_NICKNAME, 'publickey':{ 'hash':CRYPTO_CONFIG['publickey-hash'], 'text':CRYPTO_CONFIG['publickey-text'] } } ]
+                userslist = [ {'name':ADMIN['nickname'], 'publickey':{ 'hash':CRYPTO_CONFIG['publickey-hash'], 'text':CRYPTO_CONFIG['publickey-text'] } } ]
                 # Add normal users to the list only if only-admin flag is not set OR user is the admin via web
                 if((MISC_CONFIG['only-admin'] == False) or CLIENTS[websocketId]['isAdmin']):
                   for c in CLIENTS:
@@ -190,7 +188,7 @@ async def chatEngine(websocket):
 
                 # Send welcome message if set
                 if(MISC_CONFIG['welcome-message'] != None):
-                  await sendMessage(ADMIN_NICKNAME, CLIENTS[websocketId], html.escape(MISC_CONFIG['welcome-message']))
+                  await sendMessage(ADMIN['nickname'], CLIENTS[websocketId], html.escape(MISC_CONFIG['welcome-message']))
 
                 # If connected client is not admin via web, che if to send the join notification
                 if(not CLIENTS[websocketId]['isAdmin']):
@@ -198,8 +196,8 @@ async def chatEngine(websocket):
 
                   # If only-admin flag is set then send only to the admin via web (if any), otherwise send to everybody
                   if(MISC_CONFIG['only-admin']):
-                    if(ADMIN_WEBSOCKET != False):
-                      await sendCommand('signal', payloadObj['user'], joinNotificationPayload, [CLIENTS[ADMIN_WEBSOCKET]['ws']])
+                    if(ADMIN['ws'] != False):
+                      await sendCommand('signal', payloadObj['user'], joinNotificationPayload, [CLIENTS[ADMIN['ws']]['ws']])
                   else:
                     await sendCommand('signal', payloadObj['user'], joinNotificationPayload)
 
@@ -219,8 +217,8 @@ async def chatEngine(websocket):
     if websocketId in CLIENTS:
       user_tmp = CLIENTS[websocketId]['user']
       del CLIENTS[websocketId]
-      if(websocketId == ADMIN_WEBSOCKET):
-        ADMIN_WEBSOCKET = False
+      if(websocketId == ADMIN['ws']):
+        ADMIN['ws'] = False
       else:
         await sendCommand('signal', user_tmp, { 'code':'chat-left' })
       printPrompt(TXT_ORANGE + TXT_ITALIC + user_tmp + ' abandoned chat' + TXT_CLEAR)
@@ -249,7 +247,7 @@ async def processMessage(websocket, user, data):
       messageObj = json.loads(messageDecoded)
 
       # Check if the received message is just the server copy of a message sent from the admin via web interface
-      if((('isCopy' in messageObj) and messageObj['isCopy']) or (messageObj['from'] == ADMIN_NICKNAME)):
+      if((('isCopy' in messageObj) and messageObj['isCopy']) or (messageObj['from'] == ADMIN['nickname'])):
         printPrompt('From ' + TXT_RED + TXT_BOLD + messageObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
         return
       else:
@@ -332,13 +330,38 @@ async def chatClose():
 
 # Init Crypto
 def initCrypto():
-  CRYPTO_CONFIG['privatekey'] = rsa.generate_private_key(public_exponent=65537, key_size=4096)
-  CRYPTO_CONFIG['privatekey-pem'] = CRYPTO_CONFIG['privatekey'].private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
+
+  # Check if a custom private key is provided
+  if(ADMIN['custom-private-key']):
+    try:
+      if(not re.compile('^[a-zA-Z0-9\-\.]{1,30}$').match(ADMIN['custom-private-key'])):
+        raise Exception('invalid file name')
+      if(not os.path.isfile(ADMIN['custom-private-key'])):
+        raise Exception('file does not exists')
+
+      # Load private key
+      with open(ADMIN['custom-private-key'], 'rb') as privateKeyFile:
+        CRYPTO_CONFIG['privatekey-pem'] = privateKeyFile.read()
+        CRYPTO_CONFIG['privatekey'] = serialization.load_pem_private_key(CRYPTO_CONFIG['privatekey-pem'], password=None)
+        if(not isinstance(CRYPTO_CONFIG['privatekey'], rsa.RSAPrivateKey)):
+          raise Exception('file does not contain an RSA private key')
+
+    except Exception as e:
+      printPrompt(TXT_RED + TXT_BOLD + '[-] Crypto error, invalid private key file: ' + str(e) + TXT_CLEAR)
+      return False
+
+  # No custom private key, generate a new one
+  else:
+    CRYPTO_CONFIG['privatekey'] = rsa.generate_private_key(public_exponent=65537, key_size=4096)
+    CRYPTO_CONFIG['privatekey-pem'] = CRYPTO_CONFIG['privatekey'].private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption())
+
+  # Generate public key from private key
   CRYPTO_CONFIG['publickey'] = CRYPTO_CONFIG['privatekey'].public_key()
   CRYPTO_CONFIG['publickey-pem'] = CRYPTO_CONFIG['publickey'].public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
   CRYPTO_CONFIG['publickey-text'] = packPublicKey(CRYPTO_CONFIG['publickey-pem'])
   CRYPTO_CONFIG['publickey-hash'] = hashlib.sha256(CRYPTO_CONFIG['publickey-text'].encode('utf-8')).hexdigest()
-  printPrompt('[+] ... Crypto started')
+  printPrompt('[+] ... Crypto started (random keys generated)')
+  return True
 
 
 # Init Chat Engine
@@ -398,8 +421,6 @@ def initSSHPFW():
 #
 
 def promptProcessor():
-  global ADMIN_WEBSOCKET
-
   promptInput = input()
   promptInput = promptInput.strip()
   if(promptInput == ''):
@@ -418,7 +439,7 @@ def promptProcessor():
         # Command: users - list all connected users
         case 'users':
           printPrompt('[i] Connected users:')
-          printPrompt('[i]   * ' + TXT_RED + TXT_BOLD + ADMIN_NICKNAME + TXT_CLEAR + ' (🔒' + TXT_CYAN + CRYPTO_CONFIG['publickey-hash'][:10] + TXT_CLEAR + CRYPTO_CONFIG['publickey-hash'][10:] + ')')
+          printPrompt('[i]   * ' + TXT_RED + TXT_BOLD + ADMIN['nickname'] + TXT_CLEAR + ' (🔒' + TXT_CYAN + CRYPTO_CONFIG['publickey-hash'][:10] + TXT_CLEAR + CRYPTO_CONFIG['publickey-hash'][10:] + ')')
           cnt = 1
           for c in CLIENTS:
             printPrompt('[i]   * ' + CLIENTS[c]['user'] + ((' (🔒' + TXT_CYAN + CLIENTS[c]['publickey']['hash'][:10] + TXT_CLEAR + CLIENTS[c]['publickey']['hash'][10:] + ')') if (CLIENTS[c]['publickey'] != None) else ''))
@@ -499,14 +520,14 @@ def promptProcessor():
         return
 
       # If there is a admin via web, then send its copy
-      if(ADMIN_WEBSOCKET != False):
+      if(ADMIN['ws'] != False):
         webCopyPayload = { 'message':message, 'to':('@all' if (('isAll' in flags) and flags['isAll']) else destination['user']) }
-        asyncio.run(sendMessage(ADMIN_NICKNAME, CLIENTS[ADMIN_WEBSOCKET], json.dumps(webCopyPayload), {'isCopy':True}))
+        asyncio.run(sendMessage(ADMIN['nickname'], CLIENTS[ADMIN['ws']], json.dumps(webCopyPayload), {'isCopy':True}))
 
       # Print message in console and sent it to the destination
-      printPrompt(TXT_PREVLINE + 'From ' + TXT_RED + TXT_BOLD + ADMIN_NICKNAME + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + (commandOrDestination if (len(destinations) == 1) else '@all') + TXT_CLEAR + ': ' + message)
+      printPrompt(TXT_PREVLINE + 'From ' + TXT_RED + TXT_BOLD + ADMIN['nickname'] + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + (commandOrDestination if (len(destinations) == 1) else '@all') + TXT_CLEAR + ': ' + message)
       for destination in destinations:
-        asyncio.run(sendMessage(ADMIN_NICKNAME, destination, message, flags))
+        asyncio.run(sendMessage(ADMIN['nickname'], destination, message, flags))
 
     # Invalid input
     case _:
@@ -621,7 +642,10 @@ async def startServices(args):
   print('[+] Starting services...')
 
   # Crypto
-  initCrypto()
+  if(not initCrypto()):
+    printPrompt(TXT_RED + TXT_BOLD + '[-] Error starting crypto' + TXT_CLEAR)
+    stopServices()
+    sys.exit(0)
 
   # Web Server
   webserver_t = threading.Thread(target=initWebServer)
@@ -693,7 +717,8 @@ if __name__ == '__main__':
   parser.add_argument('-i','--ip-address', action='store', help='Web Server and Chat Engine IP Address (Default: ' + WEBSERVER_IP + ')', default=WEBSERVER_IP, type=str)
   parser.add_argument('-p','--port', action='store', help='Web Server listening port (Value: 1 to 65535; Default: ' + str(WEBSERVER_PORT) + ')', default=WEBSERVER_PORT, type=int)
   parser.add_argument('-w','--wsport', action='store', help='Chat Engine Web Socket listening port (Value: 1 to 65535; Default: ' + str(WEBSOCKET_PORT) + ')', default=WEBSOCKET_PORT, type=int)
-  parser.add_argument('-n','--admin-nickname', action='store', help='Admin nickname (Value: [A-Z0-9], min 4, max 15 characters; Default: ' + ADMIN_NICKNAME + ')', default=ADMIN_NICKNAME, type=str)
+  parser.add_argument('-n','--admin-nickname', action='store', help='Admin nickname (Value: [A-Z0-9], min 4, max 15 characters; Default: ' + ADMIN['nickname'] + ')', default=ADMIN['nickname'], type=str)
+  parser.add_argument('--admin-private-key', action='store', help='Admin custom Private Key File (generate with \"openssl genrsa -out private.pem 4096\"', type=str)
   parser.add_argument('--welcome', action='store', help='Welcome message', type=str)
   parser.add_argument('--disable-all', action='store_true', help='Prevent users to send messages to @all destination (admin can always send to @all)')
   parser.add_argument('--only-admin', action='store_true', help='Allow users to send messages only to admin (forces --disable-all, admin can always send to everybody)')
@@ -760,10 +785,14 @@ if __name__ == '__main__':
 
     # Admin nickname
     if(re.compile('^[A-Z0-9]{4,15}$').match(args.admin_nickname)):
-      ADMIN_NICKNAME = args.admin_nickname
+      ADMIN['nickname'] = args.admin_nickname
     else:
       print('[-] Invalid Admin nickname')
       sys.exit(1);
+
+    # Admin custom private key
+    if(args.admin_private_key != None):
+      ADMIN['custom-private-key'] = args.admin_private_key
 
     # SSH Port Forwarding configuration
     SSH_PFW_CONFIG = validateSSHPFW(args)
