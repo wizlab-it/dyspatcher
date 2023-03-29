@@ -5,7 +5,7 @@ var CHAT = {
   ADMIN: null,
   OBJ_IDS: ["loading", "chat", "user", "chat-connect", "chat-localuser-name", "chat-userslist", "chat-localuser", "chat-message", "chat-message-txt", "userslist", "userslist-toggler", "chatInitButton", "receivedMessages", "custom-keys", "custom-private-key", "custom-public-key", "chat-localuser-keyid"],
   OBJS: {},
-  CONFIGS: null,
+  CONFIGS: { "is-admin":false },
   CRYPTO: {
     "config": {
       "oaep": { "name":"RSA-OAEP", "modulusLength":4096, "publicExponent": new Uint8Array([1, 0, 1]), "hash":"SHA-256" },
@@ -113,7 +113,11 @@ var CHAT = {
   websocketEventHandlerMessage: function(event) {
     try {
       payload = JSON.parse(event.data)
-      console.log(event.data);
+
+      //FIXME
+      //console.log(event.data);
+      //console.log(payload);
+
       switch(payload.cmd) {
 
         // Chat message received
