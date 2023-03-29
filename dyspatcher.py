@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.8'
-BUILD = '20230328.113'
+BUILD = '20230329.116'
 ###########################################################
 
 import argparse
@@ -232,35 +232,36 @@ async def processMessage(websocket, user, data):
   if(message == ''):
     return
 
-  # Try to decrypt the message
-  messageDecoded = False
+  # Try to decrypt the message and check signature
+  messageIsForAdmin = False
   try:
+    # Decrypt
     client = getClientByUser(user)
     messageBinary = base64.b64decode(message)
     messageDecoded = CRYPTO_CONFIG['privatekey'].decrypt(messageBinary, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
     messageDecoded = messageDecoded.decode('latin1')
     signatureBinary = base64.b64decode(data['signature'])
 
-    # If signature is correct, then no exception is raised
-    try:
-      client['publickey']['rsa'].verify(signatureBinary, messageDecoded.encode('latin1'), padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())
-      messageObj = json.loads(messageDecoded)
+    # Verify signature
+    client['publickey']['rsa'].verify(signatureBinary, messageDecoded.encode('latin1'), padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())
+    messageObj = json.loads(messageDecoded)
+    messageIsForAdmin = True
 
-      # Check if the received message is just the server copy of a message sent from the admin via web interface
-      if((('isCopy' in messageObj) and messageObj['isCopy']) or (messageObj['from'] == ADMIN['nickname'])):
-        printPrompt('From ' + TXT_RED + TXT_BOLD + messageObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
+    # Check if the received message is just the server copy of a message sent from the admin via web interface
+    if((('isCopy' in messageObj) and messageObj['isCopy']) or (messageObj['from'] == ADMIN['nickname'])):
+      printPrompt('From ' + TXT_RED + TXT_BOLD + messageObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
+      return
+    else:
+      printPrompt('From ' + TXT_GREEN + TXT_BOLD + messageObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
+      # If no admins are connected via web, then exists
+      if(ADMIN['ws'] == False):
         return
-      else:
-        printPrompt('From ' + TXT_GREEN + TXT_BOLD + messageObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
-
-    except:
-      pass
 
   except:
     pass
 
   # Finally, forward the message to the clients
-  await sendCommand('message', '', { 'message':message, 'signature':data['signature'] } )
+  await sendCommand('message', '', { 'message':message, 'signature':data['signature'] }, ([CLIENTS[ADMIN['ws']]['ws']] if messageIsForAdmin else False))
 
 
 #

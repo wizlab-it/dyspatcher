@@ -113,6 +113,7 @@ var CHAT = {
   websocketEventHandlerMessage: function(event) {
     try {
       payload = JSON.parse(event.data)
+      console.log(event.data);
       switch(payload.cmd) {
 
         // Chat message received
