@@ -11,7 +11,7 @@ var CHAT = {
       "oaep": { "name":"RSA-OAEP", "modulusLength":4096, "publicExponent": new Uint8Array([1, 0, 1]), "hash":"SHA-256" },
       "pss": { "name":"RSA-PSS", "hash":"SHA-256", "saltLength":256 },
     },
-    "keys": { "objs":null, "pem":{}, "keyid":null },
+    "keys": { "objs":null, "pem":{}, "keyid":null, "allAesKey":false },
     "publickeyCache": {},
   },
 
@@ -37,7 +37,7 @@ var CHAT = {
 
     // Generate encryption keys
     CHAT.OBJS["loading"].innerHTML += "<br>Generating crypto keys... ";
-    if(!await CHAT.cryptoGenKeys()) {
+    if(!await CHAT.cryptoGenRSAKeys()) {
       CHAT.OBJS["loading"].innerHTML += "<span class='red'><b>Error</b>!</span>";
       CHAT.OBJS["loading"].innerHTML += "<p>Error loading crypto (unencrypted connection?)</p>";
       return;
@@ -68,7 +68,7 @@ var CHAT = {
     let customPrivateKey = CHAT.OBJS["custom-private-key"].value.trim();
     let customPublicKey = CHAT.OBJS["custom-public-key"].value.trim();
     if(customPrivateKey || customPublicKey) {
-      if(!await CHAT.cryptoImportCustomKeys(customPrivateKey, customPublicKey)) {
+      if(!await CHAT.cryptoImportCustomRSAKeys(customPrivateKey, customPublicKey)) {
         CHAT.printMessage("signal", "Invalid custom keys");
         return;
       }
@@ -114,7 +114,7 @@ var CHAT = {
     try {
       payload = JSON.parse(event.data)
 
-      //FIXME
+      //FIXIT
       //console.log(event.data);
       //console.log(payload);
 
@@ -122,7 +122,11 @@ var CHAT = {
 
         // Chat message received
         case "message":
-          CHAT.messageDecryptAndPrint(payload.data);
+          if(payload.data.isAll) {
+            CHAT.cryptoAesDecryptAndPrint(CHAT.CRYPTO.keys.allAesKey, payload.data.iv, payload.data.ciphertext);
+          } else {
+            CHAT.cryptoRsaDecryptAndPrint(payload.data);
+          }
           break;
 
         // Signal received
@@ -170,9 +174,12 @@ var CHAT = {
           // Save full configs
           CHAT.CONFIGS = payload.data;
 
-          // Store own username and key ID
+          // Store own username, Key ID and @all AES key
           CHAT.USER = payload.data.user;
           CHAT.CRYPTO.keys.keyid = payload.data.keyid;
+          window.crypto.subtle.importKey("raw", CHAT.str2ab(atob(payload.data["all-aeskey"])), "AES-GCM", true, ["encrypt", "decrypt"]).then(aeskey => {
+            CHAT.CRYPTO.keys.allAesKey = aeskey;
+          })
 
           // Show connected interface
           CHAT.setInterface(true);
@@ -189,43 +196,37 @@ var CHAT = {
 
   // Send message
   sendMessage: function(destination, message, allDestinationCounter=-1) {
+    let msgPayload = { "from":CHAT.USER, "to":"@" + destination, "message":message };
+
     // If it's a message for @all, then generates one message for each destination and exists
     if(destination == "all") {
-
-      // If @all destination is disabled, then exists immediately
-      if(CHAT.CONFIGS["disable-all"] && !CHAT.CONFIGS["is-admin"]) {
+      // If not web admin: if @all destination is disabled or no @all AES key exists, then exists immediately
+      if(!CHAT.CONFIGS["is-admin"] && (CHAT.CONFIGS["disable-all"] || !CHAT.CRYPTO.keys.allAesKey)) {
         CHAT.printMessage("signal", "You can't send messages to @all", true);
         return;
       }
 
-      // Generates message to @all
-      let destinations = document.querySelectorAll(".userslist-user");
-      for(user of destinations) {
-        if(user.dataset.user == CHAT.USER) continue;
-        allDestinationCounter++;
-        CHAT.sendMessage(user.dataset.user, message, allDestinationCounter);
-      }
+      //AES Encrypt message and send
+      CHAT.printMessage("my", msgPayload);
+      CHAT.cryptoAesEncryptAndSend(CHAT.CRYPTO.keys.allAesKey, JSON.stringify(msgPayload));
       return;
-    }
 
-    // If destination public key is available, then encrypt the message and send it and print the send message in local chat
-    let publickey = CHAT.getUserPublicKey(destination);
-    if(publickey && publickey["encrypt"]) {
-      let msgPayload = { "from":CHAT.USER, "to":((allDestinationCounter >= 0) ? "@all" : destination), "message":message };
-      CHAT.messageEncryptAndSend(publickey["encrypt"], JSON.stringify(msgPayload));
+    } else {
 
-      // If it's a single-destination message (-1), or the first of an @all-destination (0), then print the local copy and send the server copy
-      if(allDestinationCounter <= 0) {
+      // If destination public key is available, then encrypt the message and send it and print the send message in local chat
+      let publickey = CHAT.cryptoGetUserRSAPublicKey(destination);
+      if(publickey && publickey.encrypt) {
         CHAT.printMessage("my", msgPayload);
+        CHAT.cryptoRsaEncryptAndSend(publickey.encrypt, JSON.stringify(msgPayload));
 
         // If user is admin web, then send message to server to show it in local chat
         if(CHAT.CONFIGS["is-admin"] && (destination != CHAT.ADMIN)) {
           msgPayload.isCopy = true;
-          CHAT.messageEncryptAndSend(CHAT.CRYPTO.keys.objs.publicKey, JSON.stringify(msgPayload));
+          CHAT.cryptoRsaEncryptAndSend(CHAT.CRYPTO.keys.objs.publicKey, JSON.stringify(msgPayload));
         }
+      } else {
+        CHAT.printMessage("signal", "Unknown destination or missing encryption key", true);
       }
-    } else {
-      CHAT.printMessage("signal", "Unknown destination or missing encryption key", true);
     }
   },
 
@@ -237,7 +238,7 @@ var CHAT = {
   //
 
   // Generate Keys
-  cryptoGenKeys: function() {
+  cryptoGenRSAKeys: function() {
     return new Promise((keysStatus) => {
       try {
         window.crypto.subtle.generateKey(CHAT.CRYPTO.config.oaep, true, ["encrypt", "decrypt"]).then(keyPair => {
@@ -270,7 +271,7 @@ var CHAT = {
   },
 
   // Import Custom Keys
-  cryptoImportCustomKeys: function(privateKeyPem, publicKeyPem) {
+  cryptoImportCustomRSAKeys: function(privateKeyPem, publicKeyPem) {
     return new Promise((keysStatus) => {
       try {
         // Convert PEM to binary
@@ -313,7 +314,7 @@ var CHAT = {
   },
 
   // Import public key
-  cryptoImportPublicKey: function(hash, publickeyB64) {
+  cryptoImportRSAPublicKey: function(hash, publickeyB64) {
     publickey = CHAT.str2ab(window.atob(publickeyB64));
     window.crypto.subtle.importKey("spki", publickey, CHAT.CRYPTO.config.oaep, true, ["encrypt"]).then(publickeyEncrypt => {
       CHAT.CRYPTO.publickeyCache[hash] = { "encrypt":publickeyEncrypt };
@@ -324,7 +325,7 @@ var CHAT = {
   },
 
   // Download encryption keys
-  cryptoDownloadKey: function(type) {
+  cryptoDownloadRSAKey: function(type) {
     let pemKey = "";
     switch(type) {
       case "private":
@@ -348,7 +349,7 @@ var CHAT = {
   },
 
   // Get user public key from cache
-  getUserPublicKey: function(user) {
+  cryptoGetUserRSAPublicKey: function(user) {
     try {
       let hash = document.getElementById("userslist-user-" + user).dataset.publickey;
       if(hash in CHAT.CRYPTO.publickeyCache) {
@@ -360,8 +361,31 @@ var CHAT = {
     return false;
   },
 
+  // AES: encrypt message
+  cryptoAesEncryptAndSend: function(key, plaintext) {
+    const iv = window.crypto.getRandomValues(new Uint8Array(16));
+    window.crypto.subtle.encrypt({ "name":"AES-GCM", "iv":iv }, key, (new TextEncoder()).encode(plaintext)).then(ciphertext => {
+      let ciphertextB64 = window.btoa(CHAT.ab2str(ciphertext));
+      CHAT.sendCommand("message", { "message":ciphertextB64, "iv":window.btoa(CHAT.ab2str(iv)), "isAll":true });
+    });
+  },
+
+  // AES: decrypt message
+  cryptoAesDecryptAndPrint: function(key, iv, ciphertext) {
+    try {
+      iv = CHAT.str2ab(atob(iv));
+      ciphertext = CHAT.str2ab(atob(ciphertext));
+      window.crypto.subtle.decrypt({ "name":"AES-GCM", "iv":iv }, key, ciphertext).then(plaintext => {
+        plaintextObj = JSON.parse(CHAT.ab2str(plaintext));
+        if(plaintextObj.from != CHAT.USER) {
+          CHAT.printMessage("other", plaintextObj);
+        }
+      });
+    } catch(e) { }
+  },
+
   //Encrypt a message
-  messageEncryptAndSend: function(publickey, message) {
+  cryptoRsaEncryptAndSend: function(publickey, message) {
     message = CHAT.str2ab(message);
     window.crypto.subtle.encrypt({ "name":CHAT.CRYPTO.config.oaep.name }, publickey, message).then(messageEncrypted => {
       let messageEncryptedB64 = window.btoa(CHAT.ab2str(messageEncrypted));
@@ -373,11 +397,11 @@ var CHAT = {
   },
 
   //Decrypt message and check signature
-  messageDecryptAndPrint: function(message) {
+  cryptoRsaDecryptAndPrint: function(message) {
     window.crypto.subtle.decrypt({ "name":CHAT.CRYPTO.config.oaep.name }, CHAT.CRYPTO.keys.objs.privateKey, CHAT.str2ab(window.atob(message.message))).then(messagePlainAB => {
       let messageStr = CHAT.ab2str(messagePlainAB);
       let messageObj = JSON.parse(messageStr);
-      let publickey = CHAT.getUserPublicKey(messageObj.from);
+      let publickey = CHAT.cryptoGetUserRSAPublicKey(messageObj.from);
       if(publickey && publickey.verify) {
         window.crypto.subtle.verify(CHAT.CRYPTO.config.pss, publickey.verify, CHAT.str2ab(message.signature), CHAT.str2ab(messageStr)).then(() => {
           CHAT.printMessage("other", messageObj);
@@ -554,7 +578,7 @@ var CHAT = {
     if(((typeof publickey) === "object") && (publickey.text != "")) {
       userBlock.dataset.user = user;
       userBlock.dataset.publickey = publickey.hash;
-      CHAT.cryptoImportPublicKey(publickey.hash, publickey.text);
+      CHAT.cryptoImportRSAPublicKey(publickey.hash, publickey.text);
       userBlock.classList.add("lock");
     }
     userBlock.addEventListener("click", function(event) {
