@@ -241,37 +241,49 @@ async def processMessage(websocket, user, data):
       plaintext = aesDecrypt(base64.b64decode(data['iv']), base64.b64decode(ciphertextB64))
       if(plaintext != False):
         plaintextObj = json.loads(plaintext)
+        if(plaintextObj['from'] == ADMIN['nickname']):
+          plaintextObj['from'] = TXT_RED + plaintextObj['from'] + ' (via web)'
         printPrompt('From ' + TXT_GREEN + TXT_BOLD + plaintextObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
         await sendCommand('message', '', data)
 
     # RSA encryption (1-to-1 message)
     case 'rsa':
+
+      # Try to decrypt: if successful, them message is for admin so do not forward to anyone
       try:
-        # Decrypt
         client = getClientByUser(user)
         ciphertext = base64.b64decode(ciphertextB64)
         plaintext = CRYPTO_CONFIG['privatekey'].decrypt(ciphertext, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
         plaintext = plaintext.decode('latin1')
         signature = base64.b64decode(data['signature'])
 
-        # Verify signature
-        client['publickey']['rsa'].verify(signature, plaintext.encode('latin1'), padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())
-        plaintextObj = json.loads(plaintext)
+        # If here, it's already known that message is for admin: check signature and print if ok
+        try:
+          # Verify signature
+          client['publickey']['rsa'].verify(signature, plaintext.encode('latin1'), padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())
+          plaintextObj = json.loads(plaintext)
 
-        # Check if the received message is just the server copy of a message sent from the admin via web interface
-        if(plaintextObj['from'] == ADMIN['nickname']):
-          printPrompt('From ' + TXT_RED + TXT_BOLD + plaintextObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
-          return
-        else:
-          printPrompt('From ' + TXT_GREEN + TXT_BOLD + plaintextObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
-          if(ADMIN['ws']):
-            await sendCommand('message', '', data, [CLIENTS[ADMIN['ws']]['ws']])
+          # Check if the received message is just the server copy of a message sent from the admin via web interface
+          if(plaintextObj['from'] == ADMIN['nickname']):
+            printPrompt('From ' + TXT_RED + TXT_BOLD + plaintextObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
             return
+          else:
+            printPrompt('From ' + TXT_GREEN + TXT_BOLD + plaintextObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
+            if(ADMIN['ws']):
+              await sendCommand('message', '', data, [CLIENTS[ADMIN['ws']]['ws']])
+              return
 
+        # Signature verification failed
+        except:
+          pass
+
+        return
+
+      # Unable to decrypt message (invalid key)
       except:
         pass
 
-      # Finally, forward the message to the clients
+      # If here, message is not for admin (unable to decrypt), so forward to clients
       await sendCommand('message', '', data)
 
 
@@ -297,7 +309,6 @@ async def sendCommand(cmd, user, data, wss=False):
 async def sendMessage(sender, destination, message, flags={}):
   # Build payload
   payload = { 'from':sender, 'to':destination['user'], 'message':message }
-  if(('isAll' in flags) and flags['isAll']): payload['to'] = '@all'
   if(('isCopy' in flags) and flags['isCopy']): payload['isCopy'] = True
 
   # Pack payload, encrypt, sign and send
@@ -532,7 +543,7 @@ def promptProcessor():
 
       # If there is a admin via web, then send its copy
       if(ADMIN['ws'] != False):
-        webCopyPayload = { 'message':message, 'to':('@' + commandOrDestination) }
+        webCopyPayload = { 'message':message, 'to':commandOrDestination }
         asyncio.run(sendMessage(ADMIN['nickname'], CLIENTS[ADMIN['ws']], json.dumps(webCopyPayload), {'isCopy':True}))
 
       # Print message on console
@@ -540,7 +551,7 @@ def promptProcessor():
 
       # If message is for @all, then AES encrypt and send, otherwise send normal message
       if(commandOrDestination == "all"):
-        payload = json.dumps({'from':ADMIN['nickname'], 'to':'@all', 'message':message}).encode('utf-8')
+        payload = json.dumps({'from':ADMIN['nickname'], 'to':commandOrDestination, 'message':message}).encode('utf-8')
         (iv, ciphertext) = aesEncrypt(payload)
         asyncio.run(sendCommand('message', '', { 'iv':base64.b64encode(iv).decode('utf-8'), 'ciphertext':base64.b64encode(ciphertext).decode('utf-8'), 'algo':'aes' }))
       else:

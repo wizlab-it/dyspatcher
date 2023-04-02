@@ -12,7 +12,7 @@ var CHAT = {
       "pss": { "name":"RSA-PSS", "hash":"SHA-256", "saltLength":256 },
     },
     "keys": { "objs":null, "pem":{}, "keyid":null },
-    "keyCache": {},
+    "keyCache": { },
   },
 
   // Constants
@@ -180,9 +180,11 @@ var CHAT = {
           // Store own username, Key ID and @all AES key
           CHAT.USER = payload.data.user;
           CHAT.CRYPTO.keys.keyid = payload.data.keyid;
-          window.crypto.subtle.importKey("raw", CHAT.str2ab(atob(payload.data["aeskey"])), "AES-GCM", true, ["encrypt", "decrypt"]).then(aeskey => {
-            CHAT.CRYPTO.keyCache["aeskey"] = aeskey;
-          })
+          try {
+            window.crypto.subtle.importKey("raw", CHAT.str2ab(atob(payload.data["aeskey"])), "AES-GCM", true, ["encrypt", "decrypt"]).then(aeskey => {
+              CHAT.CRYPTO.keyCache["aeskey"] = aeskey;
+            })
+          } catch(e) { }
 
           // Show connected interface
           CHAT.setInterface(true);
@@ -200,6 +202,7 @@ var CHAT = {
   // Send message
   sendMessage: function(destination, message) {
     let msgPayload = { "from":CHAT.USER, "to":destination, "message":message };
+    let msgPayloadStr = JSON.stringify(msgPayload);
 
     // If it's a message for @all, then send it AES encrypted
     if(destination == "all") {
@@ -211,7 +214,7 @@ var CHAT = {
 
       //AES Encrypt message and send
       CHAT.printMessage("my", msgPayload);
-      CHAT.cryptoAesEncryptAndSend(JSON.stringify(msgPayload));
+      CHAT.cryptoAesEncryptAndSend(msgPayloadStr);
       return;
 
     } else {
@@ -225,12 +228,11 @@ var CHAT = {
 
       //RSA Encrypt message and send
       CHAT.printMessage("my", msgPayload);
-      CHAT.cryptoRsaEncryptAndSend(publickey.encrypt, JSON.stringify(msgPayload));
+      CHAT.cryptoRsaEncryptAndSend(publickey.encrypt, msgPayloadStr);
 
       // If user is admin web, then send message to server to show it in local chat
       if(CHAT.CONFIGS["is-admin"] && (destination != CHAT.ADMIN)) {
-        msgPayload.isCopy = true;
-        CHAT.cryptoRsaEncryptAndSend(CHAT.CRYPTO.keys.objs.publicKey, JSON.stringify(msgPayload));
+        CHAT.cryptoRsaEncryptAndSend(CHAT.CRYPTO.keys.objs.publicKey, msgPayloadStr);
       }
     }
   },
