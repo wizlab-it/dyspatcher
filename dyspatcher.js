@@ -11,8 +11,8 @@ var CHAT = {
       "oaep": { "name":"RSA-OAEP", "modulusLength":4096, "publicExponent": new Uint8Array([1, 0, 1]), "hash":"SHA-256" },
       "pss": { "name":"RSA-PSS", "hash":"SHA-256", "saltLength":256 },
     },
-    "keys": { "objs":null, "pem":{}, "keyid":null, "allAesKey":false },
-    "publickeyCache": {},
+    "keys": { "objs":null, "pem":{}, "keyid":null },
+    "keyCache": {},
   },
 
   // Constants
@@ -122,10 +122,13 @@ var CHAT = {
 
         // Chat message received
         case "message":
-          if(payload.data.isAll) {
-            CHAT.cryptoAesDecryptAndPrint(CHAT.CRYPTO.keys.allAesKey, payload.data.iv, payload.data.ciphertext);
-          } else {
-            CHAT.cryptoRsaDecryptAndPrint(payload.data);
+          switch(payload.data.algo) {
+            case "aes":
+              CHAT.cryptoAesDecryptAndPrint(payload.data.iv, payload.data.ciphertext);
+              break;
+            case "rsa":
+              CHAT.cryptoRsaDecryptAndPrint(payload.data);
+              break;
           }
           break;
 
@@ -177,8 +180,8 @@ var CHAT = {
           // Store own username, Key ID and @all AES key
           CHAT.USER = payload.data.user;
           CHAT.CRYPTO.keys.keyid = payload.data.keyid;
-          window.crypto.subtle.importKey("raw", CHAT.str2ab(atob(payload.data["all-aeskey"])), "AES-GCM", true, ["encrypt", "decrypt"]).then(aeskey => {
-            CHAT.CRYPTO.keys.allAesKey = aeskey;
+          window.crypto.subtle.importKey("raw", CHAT.str2ab(atob(payload.data["aeskey"])), "AES-GCM", true, ["encrypt", "decrypt"]).then(aeskey => {
+            CHAT.CRYPTO.keyCache["aeskey"] = aeskey;
           })
 
           // Show connected interface
@@ -195,37 +198,39 @@ var CHAT = {
   },
 
   // Send message
-  sendMessage: function(destination, message, allDestinationCounter=-1) {
-    let msgPayload = { "from":CHAT.USER, "to":"@" + destination, "message":message };
+  sendMessage: function(destination, message) {
+    let msgPayload = { "from":CHAT.USER, "to":destination, "message":message };
 
-    // If it's a message for @all, then generates one message for each destination and exists
+    // If it's a message for @all, then send it AES encrypted
     if(destination == "all") {
       // If not web admin: if @all destination is disabled or no @all AES key exists, then exists immediately
-      if(!CHAT.CONFIGS["is-admin"] && (CHAT.CONFIGS["disable-all"] || !CHAT.CRYPTO.keys.allAesKey)) {
+      if(!CHAT.CONFIGS["is-admin"] && (CHAT.CONFIGS["disable-all"] || !CHAT.CRYPTO.keyCache["aeskey"])) {
         CHAT.printMessage("signal", "You can't send messages to @all", true);
         return;
       }
 
       //AES Encrypt message and send
       CHAT.printMessage("my", msgPayload);
-      CHAT.cryptoAesEncryptAndSend(CHAT.CRYPTO.keys.allAesKey, JSON.stringify(msgPayload));
+      CHAT.cryptoAesEncryptAndSend(JSON.stringify(msgPayload));
       return;
 
     } else {
 
-      // If destination public key is available, then encrypt the message and send it and print the send message in local chat
+      // If destination public key is not available, then exits
       let publickey = CHAT.cryptoGetUserRSAPublicKey(destination);
-      if(publickey && publickey.encrypt) {
-        CHAT.printMessage("my", msgPayload);
-        CHAT.cryptoRsaEncryptAndSend(publickey.encrypt, JSON.stringify(msgPayload));
-
-        // If user is admin web, then send message to server to show it in local chat
-        if(CHAT.CONFIGS["is-admin"] && (destination != CHAT.ADMIN)) {
-          msgPayload.isCopy = true;
-          CHAT.cryptoRsaEncryptAndSend(CHAT.CRYPTO.keys.objs.publicKey, JSON.stringify(msgPayload));
-        }
-      } else {
+      if(!publickey || !publickey.encrypt) {
         CHAT.printMessage("signal", "Unknown destination or missing encryption key", true);
+        return;
+      }
+
+      //RSA Encrypt message and send
+      CHAT.printMessage("my", msgPayload);
+      CHAT.cryptoRsaEncryptAndSend(publickey.encrypt, JSON.stringify(msgPayload));
+
+      // If user is admin web, then send message to server to show it in local chat
+      if(CHAT.CONFIGS["is-admin"] && (destination != CHAT.ADMIN)) {
+        msgPayload.isCopy = true;
+        CHAT.cryptoRsaEncryptAndSend(CHAT.CRYPTO.keys.objs.publicKey, JSON.stringify(msgPayload));
       }
     }
   },
@@ -317,9 +322,9 @@ var CHAT = {
   cryptoImportRSAPublicKey: function(hash, publickeyB64) {
     publickey = CHAT.str2ab(window.atob(publickeyB64));
     window.crypto.subtle.importKey("spki", publickey, CHAT.CRYPTO.config.oaep, true, ["encrypt"]).then(publickeyEncrypt => {
-      CHAT.CRYPTO.publickeyCache[hash] = { "encrypt":publickeyEncrypt };
+      CHAT.CRYPTO.keyCache[hash] = { "encrypt":publickeyEncrypt };
       window.crypto.subtle.importKey("spki", publickey, CHAT.CRYPTO.config.pss, true, ["verify"]).then(publickeyVerify => {
-        CHAT.CRYPTO.publickeyCache[hash]["verify"] = publickeyVerify;
+        CHAT.CRYPTO.keyCache[hash]["verify"] = publickeyVerify;
       });
     });
   },
@@ -348,34 +353,25 @@ var CHAT = {
     temp.click();
   },
 
-  // Get user public key from cache
-  cryptoGetUserRSAPublicKey: function(user) {
+  // AES: encrypt message and send
+  cryptoAesEncryptAndSend: function(plaintext) {
     try {
-      let hash = document.getElementById("userslist-user-" + user).dataset.publickey;
-      if(hash in CHAT.CRYPTO.publickeyCache) {
-        return CHAT.CRYPTO.publickeyCache[hash];
-      }
-    } catch(e) {
-      return false;
-    }
-    return false;
+      let iv = window.crypto.getRandomValues(new Uint8Array(16));
+      let plaintextTE = (new TextEncoder()).encode(plaintext);
+      window.crypto.subtle.encrypt({ "name":"AES-GCM", "iv":iv }, CHAT.CRYPTO.keyCache["aeskey"], plaintextTE).then(ciphertext => {
+        let ciphertextB64 = window.btoa(CHAT.ab2str(ciphertext));
+        let ivB64 = window.btoa(CHAT.ab2str(iv));
+        CHAT.sendCommand("message", { "ciphertext":ciphertextB64, "iv":ivB64, "algo":"aes" });
+      });
+    } catch(e) { }
   },
 
-  // AES: encrypt message
-  cryptoAesEncryptAndSend: function(key, plaintext) {
-    const iv = window.crypto.getRandomValues(new Uint8Array(16));
-    window.crypto.subtle.encrypt({ "name":"AES-GCM", "iv":iv }, key, (new TextEncoder()).encode(plaintext)).then(ciphertext => {
-      let ciphertextB64 = window.btoa(CHAT.ab2str(ciphertext));
-      CHAT.sendCommand("message", { "message":ciphertextB64, "iv":window.btoa(CHAT.ab2str(iv)), "isAll":true });
-    });
-  },
-
-  // AES: decrypt message
-  cryptoAesDecryptAndPrint: function(key, iv, ciphertext) {
+  // AES: decrypt message and print
+  cryptoAesDecryptAndPrint: function(iv, ciphertext) {
     try {
       iv = CHAT.str2ab(atob(iv));
       ciphertext = CHAT.str2ab(atob(ciphertext));
-      window.crypto.subtle.decrypt({ "name":"AES-GCM", "iv":iv }, key, ciphertext).then(plaintext => {
+      window.crypto.subtle.decrypt({ "name":"AES-GCM", "iv":iv }, CHAT.CRYPTO.keyCache["aeskey"], ciphertext).then(plaintext => {
         plaintextObj = JSON.parse(CHAT.ab2str(plaintext));
         if(plaintextObj.from != CHAT.USER) {
           CHAT.printMessage("other", plaintextObj);
@@ -384,31 +380,51 @@ var CHAT = {
     } catch(e) { }
   },
 
-  //Encrypt a message
+  // Get user public key from cache
+  cryptoGetUserRSAPublicKey: function(user) {
+    try {
+      let hash = document.getElementById("userslist-user-" + user).dataset.publickey;
+      if(hash in CHAT.CRYPTO.keyCache) {
+        return CHAT.CRYPTO.keyCache[hash];
+      }
+    } catch(e) {
+      return false;
+    }
+    return false;
+  },
+
+  // RSA: encrypt message and send
   cryptoRsaEncryptAndSend: function(publickey, message) {
     message = CHAT.str2ab(message);
-    window.crypto.subtle.encrypt({ "name":CHAT.CRYPTO.config.oaep.name }, publickey, message).then(messageEncrypted => {
-      let messageEncryptedB64 = window.btoa(CHAT.ab2str(messageEncrypted));
+    window.crypto.subtle.encrypt({ "name":CHAT.CRYPTO.config.oaep.name }, publickey, message).then(ciphertext => {
+      let ciphertextB64 = window.btoa(CHAT.ab2str(ciphertext));
       window.crypto.subtle.sign(CHAT.CRYPTO.config.pss, CHAT.CRYPTO.keys.objs.signKey, message).then(signature => {
         let signatureB64 = window.btoa(CHAT.ab2str(signature));
-        CHAT.sendCommand("message", { "message":messageEncryptedB64, "signature":signatureB64 });
+        CHAT.sendCommand("message", { "ciphertext":ciphertextB64, "signature":signatureB64, "algo":"rsa" });
       });
     });
   },
 
-  //Decrypt message and check signature
-  cryptoRsaDecryptAndPrint: function(message) {
-    window.crypto.subtle.decrypt({ "name":CHAT.CRYPTO.config.oaep.name }, CHAT.CRYPTO.keys.objs.privateKey, CHAT.str2ab(window.atob(message.message))).then(messagePlainAB => {
-      let messageStr = CHAT.ab2str(messagePlainAB);
-      let messageObj = JSON.parse(messageStr);
-      let publickey = CHAT.cryptoGetUserRSAPublicKey(messageObj.from);
+  // RSA: decrypt message, check signature and print
+  cryptoRsaDecryptAndPrint: function(ciphertext) {
+    window.crypto.subtle.decrypt({ "name":CHAT.CRYPTO.config.oaep.name }, CHAT.CRYPTO.keys.objs.privateKey, CHAT.str2ab(window.atob(ciphertext.ciphertext))).then(plaintextAB => {
+      let plaintext = CHAT.ab2str(plaintextAB);
+      let plaintextObj = JSON.parse(plaintext);
+      let publickey = CHAT.cryptoGetUserRSAPublicKey(plaintextObj.from);
       if(publickey && publickey.verify) {
-        window.crypto.subtle.verify(CHAT.CRYPTO.config.pss, publickey.verify, CHAT.str2ab(message.signature), CHAT.str2ab(messageStr)).then(() => {
-          CHAT.printMessage("other", messageObj);
+        window.crypto.subtle.verify(CHAT.CRYPTO.config.pss, publickey.verify, CHAT.str2ab(ciphertext.signature), CHAT.str2ab(plaintext)).then(() => {
+          CHAT.printMessage("other", plaintextObj);
         });
       }
     }).catch(e => { });
   },
+
+
+  /////////////////////////////////////////////////////////
+
+  //
+  // Support methods
+  //
 
   // Convert array buffer to string
   ab2str: function(buf) {

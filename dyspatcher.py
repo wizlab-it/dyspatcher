@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.8'
-BUILD = '20230401.119'
+BUILD = '20230402.122'
 ###########################################################
 
 import argparse
@@ -174,7 +174,7 @@ async def chatEngine(websocket):
                 CLIENTS[websocketId] = { 'ws':websocket, 'user':payloadObj['user'], 'isAdmin':(True if (ADMIN['ws'] == websocketId) else False), 'publickey': { 'hash':keyhash, 'text':payloadObj['data']['publickey'], 'rsa':keyRSA } }
 
                 # Send config
-                await sendCommand('config', '', { 'disable-all':MISC_CONFIG['disable-all'], 'user':CLIENTS[websocketId]['user'], 'is-admin':CLIENTS[websocketId]['isAdmin'], 'keyid':keyhash, 'all-aeskey':CRYPTO_CONFIG['all-aes256-key']['b64'] }, [websocket])
+                await sendCommand('config', '', { 'disable-all':MISC_CONFIG['disable-all'], 'user':CLIENTS[websocketId]['user'], 'is-admin':CLIENTS[websocketId]['isAdmin'], 'keyid':keyhash, 'aeskey':CRYPTO_CONFIG['aeskey']['b64'] }, [websocket])
 
                 # Send users list
                 userslist = [ {'name':ADMIN['nickname'], 'publickey':{ 'hash':CRYPTO_CONFIG['publickey-hash'], 'text':CRYPTO_CONFIG['publickey-text'] } } ]
@@ -229,50 +229,50 @@ async def chatEngine(websocket):
 # Process message
 #
 async def processMessage(websocket, user, data):
-  message = data['message'].strip()
-  if(message == ''):
+  ciphertextB64 = data['ciphertext'].strip()
+  if(ciphertextB64 == ''):
     return
 
-  # Check if it's a message for @all
-  if(('isAll' in data) and data['isAll']):
-    messageDecoded = aesDecrypt(CRYPTO_CONFIG['all-aes256-key']['bin'], base64.b64decode(data['iv']), base64.b64decode(message))
-    if(messageDecoded != False):
-      messageObj = json.loads(messageDecoded)
-      printPrompt('From ' + TXT_GREEN + TXT_BOLD + messageObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
-      await sendCommand('message', '', { 'iv':data['iv'], 'ciphertext':message, 'isAll':True })
+  # Check encryption algorithm
+  match data['algo']:
 
-  # Direct message
-  else:
-    # Try to decrypt the message and check signature
-    messageIsForAdmin = False
-    try:
-      # Decrypt
-      client = getClientByUser(user)
-      messageBinary = base64.b64decode(message)
-      messageDecoded = CRYPTO_CONFIG['privatekey'].decrypt(messageBinary, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
-      messageDecoded = messageDecoded.decode('latin1')
-      signatureBinary = base64.b64decode(data['signature'])
+    # AES encryption (@all message)
+    case 'aes':
+      plaintext = aesDecrypt(base64.b64decode(data['iv']), base64.b64decode(ciphertextB64))
+      if(plaintext != False):
+        plaintextObj = json.loads(plaintext)
+        printPrompt('From ' + TXT_GREEN + TXT_BOLD + plaintextObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
+        await sendCommand('message', '', data)
 
-      # Verify signature
-      client['publickey']['rsa'].verify(signatureBinary, messageDecoded.encode('latin1'), padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())
-      messageObj = json.loads(messageDecoded)
-      messageIsForAdmin = True
+    # RSA encryption (1-to-1 message)
+    case 'rsa':
+      try:
+        # Decrypt
+        client = getClientByUser(user)
+        ciphertext = base64.b64decode(ciphertextB64)
+        plaintext = CRYPTO_CONFIG['privatekey'].decrypt(ciphertext, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
+        plaintext = plaintext.decode('latin1')
+        signature = base64.b64decode(data['signature'])
 
-      # Check if the received message is just the server copy of a message sent from the admin via web interface
-      if((('isCopy' in messageObj) and messageObj['isCopy']) or (messageObj['from'] == ADMIN['nickname'])):
-        printPrompt('From ' + TXT_RED + TXT_BOLD + messageObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
-        return
-      else:
-        printPrompt('From ' + TXT_GREEN + TXT_BOLD + messageObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + messageObj['to'] + TXT_CLEAR + ': ' + messageObj['message'])
-        # If no admins are connected via web, then exists
-        if(ADMIN['ws'] == False):
+        # Verify signature
+        client['publickey']['rsa'].verify(signature, plaintext.encode('latin1'), padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())
+        plaintextObj = json.loads(plaintext)
+
+        # Check if the received message is just the server copy of a message sent from the admin via web interface
+        if(plaintextObj['from'] == ADMIN['nickname']):
+          printPrompt('From ' + TXT_RED + TXT_BOLD + plaintextObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
           return
+        else:
+          printPrompt('From ' + TXT_GREEN + TXT_BOLD + plaintextObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
+          if(ADMIN['ws']):
+            await sendCommand('message', '', data, [CLIENTS[ADMIN['ws']]['ws']])
+            return
 
-    except:
-      pass
+      except:
+        pass
 
-    # Finally, forward the message to the clients
-    await sendCommand('message', '', { 'message':message, 'signature':data['signature'] }, ([CLIENTS[ADMIN['ws']]['ws']] if messageIsForAdmin else False))
+      # Finally, forward the message to the clients
+      await sendCommand('message', '', data)
 
 
 #
@@ -303,8 +303,8 @@ async def sendMessage(sender, destination, message, flags={}):
   # Pack payload, encrypt, sign and send
   payload = json.dumps(payload).encode('utf-8')
   signature = base64.b64encode(CRYPTO_CONFIG['privatekey'].sign(payload, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())).decode('utf-8')
-  payloadRSA = base64.b64encode(destination['publickey']['rsa'].encrypt(payload, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))).decode('utf-8')
-  await sendCommand('message', '', { 'message':payloadRSA, 'signature':signature }, [destination['ws']])
+  ciphertext = base64.b64encode(destination['publickey']['rsa'].encrypt(payload, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))).decode('utf-8')
+  await sendCommand('message', '', { 'ciphertext':ciphertext, 'signature':signature, 'algo':'rsa' }, [destination['ws']])
 
 
 #
@@ -374,8 +374,8 @@ def initCrypto():
   CRYPTO_CONFIG['publickey-hash'] = hashlib.sha256(CRYPTO_CONFIG['publickey-text'].encode('utf-8')).hexdigest()
 
   # Generate AES 256bit key for @all destination
-  CRYPTO_CONFIG['all-aes256-key'] = { 'bin':os.urandom(32) }
-  CRYPTO_CONFIG['all-aes256-key']['b64'] = base64.b64encode(CRYPTO_CONFIG['all-aes256-key']['bin']).decode('utf-8')
+  CRYPTO_CONFIG['aeskey'] = { 'bin':os.urandom(32) }
+  CRYPTO_CONFIG['aeskey']['b64'] = base64.b64encode(CRYPTO_CONFIG['aeskey']['bin']).decode('utf-8')
 
   # Crypto init done
   printPrompt('[+] ... Crypto started (random keys generated)')
@@ -541,8 +541,8 @@ def promptProcessor():
       # If message is for @all, then AES encrypt and send, otherwise send normal message
       if(commandOrDestination == "all"):
         payload = json.dumps({'from':ADMIN['nickname'], 'to':'@all', 'message':message}).encode('utf-8')
-        (iv, ciphertext) = aesEncrypt(CRYPTO_CONFIG['all-aes256-key']['bin'], payload)
-        asyncio.run(sendCommand('message', '', { 'iv':base64.b64encode(iv).decode('utf-8'), 'ciphertext':base64.b64encode(ciphertext).decode('utf-8'), 'isAll':True }))
+        (iv, ciphertext) = aesEncrypt(payload)
+        asyncio.run(sendCommand('message', '', { 'iv':base64.b64encode(iv).decode('utf-8'), 'ciphertext':base64.b64encode(ciphertext).decode('utf-8'), 'algo':'aes' }))
       else:
         asyncio.run(sendMessage(ADMIN['nickname'], destination, message))
 
@@ -651,10 +651,10 @@ def packPublicKey(key):
 
 
 # AES Encrypt
-def aesEncrypt(key, plaintext):
+def aesEncrypt(plaintext):
   try:
     iv = os.urandom(16)
-    encryptor = Cipher(algorithms.AES(key), modes.GCM(iv)).encryptor()
+    encryptor = Cipher(algorithms.AES(CRYPTO_CONFIG['aeskey']['bin']), modes.GCM(iv)).encryptor()
     ciphertext = encryptor.update(plaintext) + encryptor.finalize() + encryptor.tag
     return (iv, ciphertext)
   except:
@@ -662,11 +662,11 @@ def aesEncrypt(key, plaintext):
 
 
 # AES Decrypt
-def aesDecrypt(key, iv, ciphertext):
+def aesDecrypt(iv, ciphertext):
   try:
     tag = ciphertext[-16:]
     ciphertext = ciphertext[0:-16]
-    decryptor = Cipher(algorithms.AES(key), modes.GCM(iv, tag)).decryptor()
+    decryptor = Cipher(algorithms.AES(CRYPTO_CONFIG['aeskey']['bin']), modes.GCM(iv, tag)).decryptor()
     return decryptor.update(ciphertext) + decryptor.finalize()
   except:
     return False
