@@ -10,8 +10,8 @@
 ###########################################################
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
-VERSION = '0.8'
-BUILD = '20230402.122'
+VERSION = '0.9'
+BUILD = '20230403.127'
 ###########################################################
 
 import argparse
@@ -137,7 +137,7 @@ async def chatEngine(websocket):
 
         # Command is a normal message, print on the console and dispatch
         case 'message':
-          await processMessage(websocket, payloadObj['user'], payloadObj['data'])
+          await processMessage(websocketId, payloadObj['user'], payloadObj['data'])
 
         # Command is a signal, log the message and dispatch
         case 'signal':
@@ -189,7 +189,7 @@ async def chatEngine(websocket):
 
                 # Send welcome message if set
                 if(MISC_CONFIG['welcome-message'] != None):
-                  await sendMessage(ADMIN['nickname'], CLIENTS[websocketId], html.escape(MISC_CONFIG['welcome-message']))
+                  await sendRSAMessage(ADMIN['nickname'], CLIENTS[websocketId], html.escape(MISC_CONFIG['welcome-message']))
 
                 # If connected client is not admin via web, che if to send the join notification
                 if(not CLIENTS[websocketId]['isAdmin']):
@@ -228,7 +228,7 @@ async def chatEngine(websocket):
 #
 # Process message
 #
-async def processMessage(websocket, user, data):
+async def processMessage(websocketId, user, data):
   ciphertextB64 = data['ciphertext'].strip()
   if(ciphertextB64 == ''):
     return
@@ -240,11 +240,30 @@ async def processMessage(websocket, user, data):
     case 'aes':
       plaintext = aesDecrypt(base64.b64decode(data['iv']), base64.b64decode(ciphertextB64))
       if(plaintext != False):
-        plaintextObj = json.loads(plaintext)
-        if(plaintextObj['from'] == ADMIN['nickname']):
-          plaintextObj['from'] = TXT_RED + plaintextObj['from'] + ' (via web)'
-        printPrompt('From ' + TXT_GREEN + TXT_BOLD + plaintextObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
-        await sendCommand('message', '', data)
+        plaintextObj = json.loads(plaintext.decode('latin1'))
+
+        # Block @all message is disable-all flag is set
+        if((plaintextObj['to'] == 'all') and (not CLIENTS[websocketId]['isAdmin']) and MISC_CONFIG['disable-all']):
+          return
+
+        #Check message signature
+        signature = base64.b64decode(data['signature'])
+        try:
+          # Verify signature
+          CLIENTS[websocketId]['publickey']['rsa'].verify(signature, plaintext, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())
+
+          # If here, signature is ok
+
+          # If message is from admin web, then change the sender before to show in local chat
+          if(CLIENTS[websocketId]['isAdmin']):
+            plaintextObj['from'] = TXT_RED + plaintextObj['from'] + ' (via web)'
+
+          # Print message locally and forward to others
+          printPrompt('From ' + TXT_GREEN + TXT_BOLD + plaintextObj['from'] + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
+          await sendCommand('message', '', data)
+
+        except:
+          pass
 
     # RSA encryption (1-to-1 message)
     case 'rsa':
@@ -264,7 +283,7 @@ async def processMessage(websocket, user, data):
           plaintextObj = json.loads(plaintext)
 
           # Check if the received message is just the server copy of a message sent from the admin via web interface
-          if(plaintextObj['from'] == ADMIN['nickname']):
+          if(CLIENTS[websocketId]['isAdmin']):
             printPrompt('From ' + TXT_RED + TXT_BOLD + plaintextObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
             return
           else:
@@ -306,10 +325,16 @@ async def sendCommand(cmd, user, data, wss=False):
 #
 # Send message
 #
-async def sendMessage(sender, destination, message, flags={}):
+async def sendAESMessage(sender, destination, message):
+  payload = json.dumps({'from':sender, 'to':destination, 'message':message}).encode('utf-8')
+  (iv, ciphertext) = aesEncrypt(payload)
+  signature = base64.b64encode(CRYPTO_CONFIG['privatekey'].sign(payload, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())).decode('utf-8')
+  await sendCommand('message', '', { 'iv':base64.b64encode(iv).decode('utf-8'), 'ciphertext':base64.b64encode(ciphertext).decode('utf-8'), 'signature':signature, 'algo':'aes' })
+
+async def sendRSAMessage(sender, destination, message, flags={}):
   # Build payload
   payload = { 'from':sender, 'to':destination['user'], 'message':message }
-  if(('isCopy' in flags) and flags['isCopy']): payload['isCopy'] = True
+  if(('isWebAdminMsgCopy' in flags) and flags['isWebAdminMsgCopy']): payload['isWebAdminMsgCopy'] = True
 
   # Pack payload, encrypt, sign and send
   payload = json.dumps(payload).encode('utf-8')
@@ -544,18 +569,16 @@ def promptProcessor():
       # If there is a admin via web, then send its copy
       if(ADMIN['ws'] != False):
         webCopyPayload = { 'message':message, 'to':commandOrDestination }
-        asyncio.run(sendMessage(ADMIN['nickname'], CLIENTS[ADMIN['ws']], json.dumps(webCopyPayload), {'isCopy':True}))
+        asyncio.run(sendRSAMessage(ADMIN['nickname'], CLIENTS[ADMIN['ws']], json.dumps(webCopyPayload), {'isWebAdminMsgCopy':True}))
 
       # Print message on console
       printPrompt(TXT_PREVLINE + 'From ' + TXT_RED + TXT_BOLD + ADMIN['nickname'] + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + commandOrDestination + TXT_CLEAR + ': ' + message)
 
       # If message is for @all, then AES encrypt and send, otherwise send normal message
       if(commandOrDestination == "all"):
-        payload = json.dumps({'from':ADMIN['nickname'], 'to':commandOrDestination, 'message':message}).encode('utf-8')
-        (iv, ciphertext) = aesEncrypt(payload)
-        asyncio.run(sendCommand('message', '', { 'iv':base64.b64encode(iv).decode('utf-8'), 'ciphertext':base64.b64encode(ciphertext).decode('utf-8'), 'algo':'aes' }))
+        asyncio.run(sendAESMessage(ADMIN['nickname'], commandOrDestination, message))
       else:
-        asyncio.run(sendMessage(ADMIN['nickname'], destination, message))
+        asyncio.run(sendRSAMessage(ADMIN['nickname'], destination, message))
 
     # Invalid input
     case _:

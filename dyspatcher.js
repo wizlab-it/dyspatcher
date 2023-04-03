@@ -113,18 +113,13 @@ var CHAT = {
   websocketEventHandlerMessage: function(event) {
     try {
       payload = JSON.parse(event.data)
-
-      //FIXIT
-      //console.log(event.data);
-      //console.log(payload);
-
       switch(payload.cmd) {
 
         // Chat message received
         case "message":
           switch(payload.data.algo) {
             case "aes":
-              CHAT.cryptoAesDecryptAndPrint(payload.data.iv, payload.data.ciphertext);
+              CHAT.cryptoAesDecryptAndPrint(payload.data);
               break;
             case "rsa":
               CHAT.cryptoRsaDecryptAndPrint(payload.data);
@@ -359,24 +354,33 @@ var CHAT = {
   cryptoAesEncryptAndSend: function(plaintext) {
     try {
       let iv = window.crypto.getRandomValues(new Uint8Array(16));
-      let plaintextTE = (new TextEncoder()).encode(plaintext);
-      window.crypto.subtle.encrypt({ "name":"AES-GCM", "iv":iv }, CHAT.CRYPTO.keyCache["aeskey"], plaintextTE).then(ciphertext => {
+      let plaintextAB = CHAT.str2ab(plaintext);
+      window.crypto.subtle.encrypt({ "name":"AES-GCM", "iv":iv }, CHAT.CRYPTO.keyCache["aeskey"], plaintextAB).then(ciphertext => {
         let ciphertextB64 = window.btoa(CHAT.ab2str(ciphertext));
         let ivB64 = window.btoa(CHAT.ab2str(iv));
-        CHAT.sendCommand("message", { "ciphertext":ciphertextB64, "iv":ivB64, "algo":"aes" });
+        window.crypto.subtle.sign(CHAT.CRYPTO.config.pss, CHAT.CRYPTO.keys.objs.signKey, plaintextAB).then(signature => {
+          let signatureB64 = window.btoa(CHAT.ab2str(signature));
+          CHAT.sendCommand("message", { "ciphertext":ciphertextB64, "iv":ivB64, "signature":signatureB64, "algo":"aes" });
+        });
       });
     } catch(e) { }
   },
 
   // AES: decrypt message and print
-  cryptoAesDecryptAndPrint: function(iv, ciphertext) {
+  cryptoAesDecryptAndPrint: function(payload) {
     try {
-      iv = CHAT.str2ab(atob(iv));
-      ciphertext = CHAT.str2ab(atob(ciphertext));
+      let iv = CHAT.str2ab(atob(payload.iv));
+      let ciphertext = CHAT.str2ab(atob(payload.ciphertext));
+      let signature = CHAT.str2ab(atob(payload.signature));
       window.crypto.subtle.decrypt({ "name":"AES-GCM", "iv":iv }, CHAT.CRYPTO.keyCache["aeskey"], ciphertext).then(plaintext => {
-        plaintextObj = JSON.parse(CHAT.ab2str(plaintext));
+        let plaintextObj = JSON.parse(CHAT.ab2str(plaintext));
         if(plaintextObj.from != CHAT.USER) {
-          CHAT.printMessage("other", plaintextObj);
+          let publickey = CHAT.cryptoGetUserRSAPublicKey(plaintextObj.from);
+          if(publickey && publickey.verify) {
+            window.crypto.subtle.verify(CHAT.CRYPTO.config.pss, publickey.verify, signature, plaintext).then(() => {
+              CHAT.printMessage("other", plaintextObj);
+            });
+          }
         }
       });
     } catch(e) { }
@@ -521,7 +525,7 @@ var CHAT = {
   printMessage: function(type, message, clearMessageTxtInputField=false) {
     // Check first if the message is the local copy of an admin message sent from the server, and if yes mangle the message accordingly
     if(CHAT.CONFIGS["is-admin"]) {
-      if(message.isCopy) {
+      if(message.isWebAdminMsgCopy) {
         message.message = JSON.parse(message.message);
         if(message.message.to == CHAT.ADMIN) return;
         message = { "from":message.from, "to":message.message.to + " (via server)", "message":message.message.message };
