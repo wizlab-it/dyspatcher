@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230403.133'
+BUILD = '20230403.134'
 ###########################################################
 
 import argparse
@@ -628,7 +628,7 @@ def validateWebServerSSL(args):
   # CA Bundle file
   if(args.ssl_cabundle != None):
     if(not re.compile('^[a-zA-Z0-9\-\.]{1,30}$').match(args.ssl_cabundle) or (not os.path.isfile(args.ssl_cabundle))):
-      args.ssl_cabundle = False
+      args.ssl_cabundle = None
 
   # Check if all params are set
   if(SSL_PARAM_CNT == 0):
@@ -843,9 +843,8 @@ if __name__ == '__main__':
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.check_hostname = False
         context.load_cert_chain(args.ssl_certificate, args.ssl_key)
-        if args.ssl_cabundle != False:
+        if args.ssl_cabundle != None:
           context.load_verify_locations(args.ssl_cabundle)
-          print("YRS")
       except:
         print('[-] Invalid SSL Certificate')
         sys.exit(1)
