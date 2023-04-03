@@ -6,7 +6,7 @@ The aim is to provide a complete and secure real-time messaging service that can
 
 The chat client is web-based and runs on any (modern) desktop/mobile browser.
 
-The server is written in *Python* (3.11) and requires the *cryptography* module. It can run on any device that supports this language - workstation, server or even a smartphone.
+The server is written in *Python* (3.10) and requires the *cryptography* module. It can run on any device that supports this language - workstation, server or even a smartphone.
 
 Integrated features help to make the service available even in those cases where the device running the server is not directly reachable from the internet.
 

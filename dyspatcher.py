@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230403.128'
+BUILD = '20230403.129'
 ###########################################################
 
 import argparse
@@ -493,7 +493,7 @@ def promptProcessor():
       match commandOrDestination:
 
         # Command: users - list all connected users
-        case 'users':
+        case 'users' | 'u':
           printPrompt('[i] Connected users:')
           printPrompt('[i]   * ' + TXT_RED + TXT_BOLD + ADMIN['nickname'] + TXT_CLEAR + ' (🔒' + TXT_CYAN + CRYPTO_CONFIG['publickey-hash'][:10] + TXT_CLEAR + CRYPTO_CONFIG['publickey-hash'][10:] + ')')
           cnt = 1
@@ -516,27 +516,26 @@ def promptProcessor():
             pass
 
         # Command: key - show private/public keys
-        case 'key':
+        case 'key' | 'k':
           try:
-            if(len(promptInput) != 2):
-              raise Exception('Err')
-            if(promptInput[1] == 'public'):
-              printPrompt('\n' + CRYPTO_CONFIG["publickey-pem"].decode('utf-8'))
-            elif(promptInput[1] == 'private'):
-              printPrompt('\n' + CRYPTO_CONFIG["privatekey-pem"].decode('utf-8'))
-            else:
-              raise Exception('Err')
+            match promptInput[1]:
+              case 'public' | 'pub':
+                printPrompt('\n' + CRYPTO_CONFIG["publickey-pem"].decode('utf-8'))
+              case 'private' | 'pri':
+                printPrompt('\n' + CRYPTO_CONFIG["privatekey-pem"].decode('utf-8'))
+              case _:
+                raise Exception('Err')
           except:
             printPrompt('[i] Usage: ' + TXT_BOLD + '/key [public/private]' + TXT_CLEAR)
             return
 
         # Command: help - show help
-        case 'help':
-          printPrompt('[i] Commands: /users, /kick [username], /key [public|private], /help, /quit')
+        case 'help' | 'h':
+          printPrompt('[i] Commands: /' + TXT_BOLD + 'u' + TXT_CLEAR + 'sers, /kick [username], /' + TXT_BOLD + 'k' + TXT_CLEAR + 'ey [' + TXT_BOLD + 'pub' + TXT_CLEAR + 'lic|' + TXT_BOLD + 'pri' + TXT_CLEAR + 'vate], /' + TXT_BOLD + 'h' + TXT_CLEAR + 'elp, /' + TXT_BOLD + 'q' + TXT_CLEAR + 'uit')
           printPrompt('[i] Messages: @{username} {message}')
 
         # Command: quit - stop the service
-        case 'quit':
+        case 'quit' | 'q':
           stopServices()
 
         # Unknown command
