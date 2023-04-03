@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230403.127'
+BUILD = '20230403.128'
 ###########################################################
 
 import argparse
@@ -281,6 +281,8 @@ async def processMessage(websocketId, user, data):
           # Verify signature
           client['publickey']['rsa'].verify(signature, plaintext.encode('latin1'), padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=256), hashes.SHA256())
           plaintextObj = json.loads(plaintext)
+
+          # If here, signature is ok
 
           # Check if the received message is just the server copy of a message sent from the admin via web interface
           if(CLIENTS[websocketId]['isAdmin']):
