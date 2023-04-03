@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230403.129'
+BUILD = '20230403.133'
 ###########################################################
 
 import argparse
@@ -625,6 +625,11 @@ def validateWebServerSSL(args):
       print('[-] Invalid SSL Key file')
       sys.exit(1);
 
+  # CA Bundle file
+  if(args.ssl_cabundle != None):
+    if(not re.compile('^[a-zA-Z0-9\-\.]{1,30}$').match(args.ssl_cabundle) or (not os.path.isfile(args.ssl_cabundle))):
+      args.ssl_cabundle = False
+
   # Check if all params are set
   if(SSL_PARAM_CNT == 0):
     return None
@@ -785,7 +790,7 @@ if __name__ == '__main__':
   epilog = '''
   \r\nexamples:\n
   ''' + TXT_BOLD + '''Enable SSL (webserver default port is 443, read note in documentation):''' + TXT_CLEAR + '''
-  python ''' + os.path.basename(sys.argv[0]) + ''' --ssl-certificate [ssl-certificate] --ssl-key [ssl-key]\n
+  python ''' + os.path.basename(sys.argv[0]) + ''' --ssl-certificate [ssl-certificate] --ssl-key [ssl-key] --ssl-cabundle [ssl-cabundle]\n
   ''' + TXT_BOLD + '''Enable SSH Port Forward (requires public key authentication on remote host, read note in documentation):''' + TXT_CLEAR + '''
   python ''' + os.path.basename(sys.argv[0]) + ''' --sshpfw-ip-address [remote-host-ip] --sshpfw-port [remote-host-ssh-port] --sshpfw-user [remote-host-ssh-user] --sshpfw-keyfile [remote-host-ssh-user-key]
   '''
@@ -800,6 +805,7 @@ if __name__ == '__main__':
   parser.add_argument('--only-admin', action='store_true', help='Allow users to send messages only to admin (forces --disable-all, admin can always send to everybody)')
   parser.add_argument('--ssl-certificate', action='store', help='Web Server SSL certificate file', type=str)
   parser.add_argument('--ssl-key', action='store', help='Web Server SSL key file', type=str)
+  parser.add_argument('--ssl-cabundle', action='store', help='Web Server SSL CA Bundle file', type=str)
   parser.add_argument('--sshpfw-ip-address', action='store', help='SSH Port Forwarding IP Address', type=str)
   parser.add_argument('--sshpfw-port', action='store', help='SSH Port Forwarding Port', type=int)
   parser.add_argument('--sshpfw-user', action='store', help='SSH Port Forwarding SSH User', type=str)
@@ -837,6 +843,9 @@ if __name__ == '__main__':
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.check_hostname = False
         context.load_cert_chain(args.ssl_certificate, args.ssl_key)
+        if args.ssl_cabundle != False:
+          context.load_verify_locations(args.ssl_cabundle)
+          print("YRS")
       except:
         print('[-] Invalid SSL Certificate')
         sys.exit(1)

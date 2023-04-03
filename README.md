@@ -115,13 +115,14 @@ Obviously, all the problems can be avoided using regular, valid SSL certificates
 HTTPS can be activated with these options:
  * **--ssl-certificate**: SSL certificate file
  * **--ssl-key**: SSL key file
+ * **--ssl-cabundle**: SSL CA Bundle file, optional
 
 When SSL is enabled, the default Web Server port is changed to 443.
 
 Example:
 
 ```
-python dyspatcher.py --ssl-certificate webserver.crt --ssl-key webserver.key
+python dyspatcher.py --ssl-certificate webserver.crt --ssl-key webserver.key --ssl-cabundle webserver.cabundle
 ```
 
 
