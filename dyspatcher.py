@@ -48,6 +48,7 @@ ADMIN = { 'nickname':'ADMIN', 'ws':False, 'custom-private-key':False }
 SSH_PFW_CONFIG = None
 CRYPTO_CONFIG = { }
 MISC_CONFIG = { 'welcome-message':None, 'disable-all':False, 'only-admin':False }
+TRANSCRIPTION = { 'filename':None, 'handler':None }
 
 
 #
@@ -592,6 +593,9 @@ def promptProcessor():
 # Output a string on the command prompt
 def printPrompt(str):
   print('\r' + str + '\n>>> ', end='', flush=True)
+  if(TRANSCRIPTION['handler'] != None):
+    TRANSCRIPTION['handler'].write(str + '\n')
+    TRANSCRIPTION['handler'].flush()
 
 
 ###########################################################
@@ -779,6 +783,10 @@ def stopServices():
   if(len(CLIENTS) > 0):
     asyncio.run(chatClose())
 
+  # Close transcription file
+  if(TRANSCRIPTION['handler'] != None):
+    TRANSCRIPTION['handler'].close();
+
   # Exit
   sys.exit(0)
 
@@ -802,10 +810,11 @@ if __name__ == '__main__':
   parser.add_argument('-p','--port', action='store', help='Web Server listening port (Value: 1 to 65535; Default: ' + str(WEBSERVER_PORT) + ')', default=WEBSERVER_PORT, type=int)
   parser.add_argument('-w','--wsport', action='store', help='Chat Engine Web Socket listening port (Value: 1 to 65535; Default: ' + str(WEBSOCKET_PORT) + ')', default=WEBSOCKET_PORT, type=int)
   parser.add_argument('-n','--admin-nickname', action='store', help='Admin nickname (Value: [A-Z0-9], min 4, max 15 characters; Default: ' + ADMIN['nickname'] + ')', default=ADMIN['nickname'], type=str)
-  parser.add_argument('--admin-private-key', action='store', help='Admin custom Private Key File (generate with \"openssl genrsa -out private.pem 4096\"', type=str)
+  parser.add_argument('--admin-private-key', action='store', help='Admin custom Private Key File (generate with \"openssl genrsa -out private.pem 4096\")', type=str)
   parser.add_argument('--welcome', action='store', help='Welcome message', type=str)
   parser.add_argument('--disable-all', action='store_true', help='Prevent users to send messages to @all destination (admin can always send to @all)')
   parser.add_argument('--only-admin', action='store_true', help='Allow users to send messages only to admin (forces --disable-all, admin can always send to everybody)')
+  parser.add_argument('--transcription', action='store', help='File where to store the full chat transcription', type=str)
   parser.add_argument('--ssl-certificate', action='store', help='Web Server SSL certificate file', type=str)
   parser.add_argument('--ssl-key', action='store', help='Web Server SSL key file', type=str)
   parser.add_argument('--ssl-cabundle', action='store', help='Web Server SSL CA Bundle file', type=str)
@@ -813,6 +822,7 @@ if __name__ == '__main__':
   parser.add_argument('--sshpfw-port', action='store', help='SSH Port Forwarding Port', type=int)
   parser.add_argument('--sshpfw-user', action='store', help='SSH Port Forwarding SSH User', type=str)
   parser.add_argument('--sshpfw-keyfile', action='store', help='SSH Port Forwarding User Key File', type=str)
+  
   parser.add_argument('-v','--version', action='version', version=PROGNAME + ' ' + VERSION)
   parser.add_argument('-a','--author', action='version', version=AUTHOR)
   args = parser.parse_args()
@@ -901,6 +911,14 @@ if __name__ == '__main__':
     if(args.only_admin):
       MISC_CONFIG['only-admin'] = True
       MISC_CONFIG['disable-all'] = True
+
+    # Chat transcription
+    if(args.transcription != None):
+      if(re.compile('^[a-zA-Z0-9\-\.]{1,30}$').match(args.transcription) and (not os.path.isfile(args.transcription))):
+        TRANSCRIPTION = { 'filename':args.transcription, 'handler':open(args.transcription, 'w') }
+      else:
+        print('[-] Invalid transcription file: invalid characters in name or file already exists')
+        sys.exit(1);
 
     #
     # Start services
