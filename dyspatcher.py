@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230403.134'
+BUILD = '20230407.135'
 ###########################################################
 
 import argparse
@@ -80,7 +80,8 @@ class ChatWebServer(BaseHTTPRequestHandler):
 
   # Silent webserver, do not log connections
   def log_message(self, format, *args):
-    pass
+    if(self.path == '/'):
+      printPrompt(TXT_CYAN + '[i] [WEB Server] Web interface loaded from ' + self.request.getpeername()[0] + TXT_CLEAR)
 
   # Process GET requests
   def do_GET(self):
@@ -121,6 +122,7 @@ class ChatWebServer(BaseHTTPRequestHandler):
 #
 async def chatEngine(websocket):
   websocketId = str(websocket.id)
+  printPrompt(TXT_CYAN + '[i] [WEB Socket] Connection open from ' + websocket.remote_address[0] + TXT_CLEAR)
 
   # Add new client to the list of clients and process communication
   try:
@@ -171,7 +173,7 @@ async def chatEngine(websocket):
                   ADMIN['ws'] = websocketId
 
                 # Create entry in clients list
-                CLIENTS[websocketId] = { 'ws':websocket, 'user':payloadObj['user'], 'isAdmin':(True if (ADMIN['ws'] == websocketId) else False), 'publickey': { 'hash':keyhash, 'text':payloadObj['data']['publickey'], 'rsa':keyRSA } }
+                CLIENTS[websocketId] = { 'ws':websocket, 'ip':websocket.remote_address, 'user':payloadObj['user'], 'isAdmin':(True if (ADMIN['ws'] == websocketId) else False), 'publickey': { 'hash':keyhash, 'text':payloadObj['data']['publickey'], 'rsa':keyRSA } }
 
                 # Send config
                 await sendCommand('config', '', { 'disable-all':MISC_CONFIG['disable-all'], 'user':CLIENTS[websocketId]['user'], 'is-admin':CLIENTS[websocketId]['isAdmin'], 'keyid':keyhash, 'aeskey':CRYPTO_CONFIG['aeskey']['b64'] }, [websocket])
@@ -223,6 +225,7 @@ async def chatEngine(websocket):
       else:
         await sendCommand('signal', user_tmp, { 'code':'chat-left' })
       printPrompt(TXT_ORANGE + TXT_ITALIC + user_tmp + ' abandoned chat' + TXT_CLEAR)
+    printPrompt(TXT_CYAN + '[i] [WEB Socket] Connection closed by ' + websocket.remote_address[0] + TXT_CLEAR)
 
 
 #
@@ -498,7 +501,7 @@ def promptProcessor():
           printPrompt('[i]   * ' + TXT_RED + TXT_BOLD + ADMIN['nickname'] + TXT_CLEAR + ' (🔒' + TXT_CYAN + CRYPTO_CONFIG['publickey-hash'][:10] + TXT_CLEAR + CRYPTO_CONFIG['publickey-hash'][10:] + ')')
           cnt = 1
           for c in CLIENTS:
-            printPrompt('[i]   * ' + CLIENTS[c]['user'] + ((' (🔒' + TXT_CYAN + CLIENTS[c]['publickey']['hash'][:10] + TXT_CLEAR + CLIENTS[c]['publickey']['hash'][10:] + ')') if (CLIENTS[c]['publickey'] != None) else ''))
+            printPrompt('[i]   * ' + CLIENTS[c]['user'] + ' (' + CLIENTS[c]['ip'][0] + ', 🔒' + TXT_CYAN + CLIENTS[c]['publickey']['hash'][:10] + TXT_CLEAR + CLIENTS[c]['publickey']['hash'][10:] + ')')
             cnt = cnt + 1
           printPrompt('[i] ' + str(cnt) + ' user' + ('s' if (cnt != 1) else '') + ' connected')
 
