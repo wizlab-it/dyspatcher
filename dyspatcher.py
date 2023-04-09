@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230407.138'
+BUILD = '20230409.142'
 ###########################################################
 
 import argparse
@@ -22,6 +22,7 @@ import html
 import sys
 import os
 import re
+from datetime import datetime
 import time
 import socket
 import threading
@@ -401,7 +402,7 @@ def initCrypto():
           raise Exception('file does not contain an RSA private key')
 
     except Exception as e:
-      printPrompt(TXT_RED + TXT_BOLD + '[-] Crypto error, invalid private key file: ' + str(e) + TXT_CLEAR)
+      printPrompt(TXT_RED + TXT_BOLD + '[-] Crypto error, invalid private key file: ' + str(e) + TXT_CLEAR, skipTranscription=True)
       return False
 
   # No custom private key, generate a new random admin private key
@@ -443,7 +444,7 @@ def initWebServer():
   try:
     WEBSERVER = HTTPServer((WEBSERVER_IP, WEBSERVER_PORT), ChatWebServer)
   except:
-    printPrompt(TXT_RED + TXT_BOLD + '[-] Web Server cannot start (address already in use?)' + TXT_CLEAR)
+    printPrompt(TXT_RED + TXT_BOLD + '[-] Web Server cannot start (address already in use?)' + TXT_CLEAR, skipTranscription=True)
     return False
 
   # Check if SSL is enabled
@@ -451,7 +452,7 @@ def initWebServer():
     try:
       WEBSERVER.socket = WEBSERVER_SSL_CONFIG['context'].wrap_socket(WEBSERVER.socket, server_side=True)
     except:
-      printPrompt(TXT_RED + TXT_BOLD + '[-] Web Server cannot start (invalid SSL certificate)' + TXT_CLEAR)
+      printPrompt(TXT_RED + TXT_BOLD + '[-] Web Server cannot start (invalid SSL certificate)' + TXT_CLEAR, skipTranscription=True)
       return False
 
   webserverUrl = TXT_BLUE + TXT_BOLD + 'http' + ('' if (WEBSERVER_SSL_CONFIG == None) else 's') + '://' + WEBSERVER_IP + ':' + str(WEBSERVER_PORT) + TXT_CLEAR
@@ -524,19 +525,19 @@ def promptProcessor():
           try:
             match promptInput[1]:
               case 'public' | 'pub':
-                printPrompt('\n' + CRYPTO_CONFIG["publickey-pem"].decode('utf-8'))
+                printPrompt('\n' + CRYPTO_CONFIG["publickey-pem"].decode('utf-8'), skipTranscription=True)
               case 'private' | 'pri':
-                printPrompt('\n' + CRYPTO_CONFIG["privatekey-pem"].decode('utf-8'))
+                printPrompt('\n' + CRYPTO_CONFIG["privatekey-pem"].decode('utf-8'), skipTranscription=True)
               case _:
                 raise Exception('Err')
           except:
-            printPrompt('[i] Usage: ' + TXT_BOLD + '/key [public/private]' + TXT_CLEAR)
+            printPrompt('[i] Usage: ' + TXT_BOLD + '/key [public/private]' + TXT_CLEAR, skipTranscription=True)
             return
 
         # Command: help - show help
         case 'help' | 'h':
-          printPrompt('[i] Commands: /' + TXT_BOLD + 'u' + TXT_CLEAR + 'sers, /kick [username], /' + TXT_BOLD + 'k' + TXT_CLEAR + 'ey [' + TXT_BOLD + 'pub' + TXT_CLEAR + 'lic|' + TXT_BOLD + 'pri' + TXT_CLEAR + 'vate], /' + TXT_BOLD + 'h' + TXT_CLEAR + 'elp, /' + TXT_BOLD + 'q' + TXT_CLEAR + 'uit')
-          printPrompt('[i] Messages: @{username} {message}')
+          printPrompt('[i] Commands: /' + TXT_BOLD + 'u' + TXT_CLEAR + 'sers, /kick [username], /' + TXT_BOLD + 'k' + TXT_CLEAR + 'ey [' + TXT_BOLD + 'pub' + TXT_CLEAR + 'lic|' + TXT_BOLD + 'pri' + TXT_CLEAR + 'vate], /' + TXT_BOLD + 'h' + TXT_CLEAR + 'elp, /' + TXT_BOLD + 'q' + TXT_CLEAR + 'uit', skipTranscription=True)
+          printPrompt('[i] Messages: @{username} {message}', skipTranscription=True)
 
         # Command: quit - stop the service
         case 'quit' | 'q':
@@ -544,7 +545,7 @@ def promptProcessor():
 
         # Unknown command
         case _:
-          printPrompt('[-] Unknown command. Send ' + TXT_BOLD + '/help' + TXT_CLEAR + ' for help')
+          printPrompt('[-] Unknown command. Send ' + TXT_BOLD + '/help' + TXT_CLEAR + ' for help', skipTranscription=True)
 
     # If input starts with @, then it's a message
     case '@':
@@ -568,7 +569,7 @@ def promptProcessor():
             raise Exception("Unknown destination")
 
       except Exception as e:
-        printPrompt('[-] ' + str(e))
+        printPrompt('[-] ' + str(e), skipTranscription=True)
         return
 
       # If there is a admin via web, then send its copy
@@ -577,7 +578,7 @@ def promptProcessor():
         asyncio.run(sendRSAMessage(ADMIN['nickname'], CLIENTS[ADMIN['ws']], json.dumps(webCopyPayload), {'isWebAdminMsgCopy':True}))
 
       # Print message on console
-      printPrompt(TXT_PREVLINE + 'From ' + TXT_RED + TXT_BOLD + ADMIN['nickname'] + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + commandOrDestination + TXT_CLEAR + ': ' + message)
+      printPrompt('From ' + TXT_RED + TXT_BOLD + ADMIN['nickname'] + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + commandOrDestination + TXT_CLEAR + ': ' + message, onPreviousLine=True)
 
       # If message is for @all, then AES encrypt and send, otherwise send normal message
       if(commandOrDestination == "all"):
@@ -587,13 +588,14 @@ def promptProcessor():
 
     # Invalid input
     case _:
-      printPrompt('[-] Invalid input. Send ' + TXT_BOLD + '/help' + TXT_CLEAR + ' for help')
+      printPrompt('[-] Invalid input. Send ' + TXT_BOLD + '/help' + TXT_CLEAR + ' for help', skipTranscription=True)
 
 
 # Output a string on the command prompt
-def printPrompt(str):
-  print('\r' + str + '\n>>> ', end='', flush=True)
-  if(TRANSCRIPTION['handler'] != None):
+def printPrompt(str, onPreviousLine=False, skipTranscription=False):
+  str = datetime.now().strftime('[%d-%m-%Y, %H:%M:%S] ') + str
+  print('\r' + (TXT_PREVLINE if onPreviousLine else '') + str + '\n>>> ', end='', flush=True)
+  if((TRANSCRIPTION['handler'] != None) and (skipTranscription == False)):
     TRANSCRIPTION['handler'].write(str + '\n')
     TRANSCRIPTION['handler'].flush()
 
@@ -731,7 +733,7 @@ async def startServices(args):
 
   # Crypto
   if(not initCrypto()):
-    printPrompt(TXT_RED + TXT_BOLD + '[-] Error starting crypto' + TXT_CLEAR)
+    printPrompt(TXT_RED + TXT_BOLD + '[-] Error starting crypto' + TXT_CLEAR, skipTranscription=True)
     stopServices()
     sys.exit(0)
 
@@ -754,7 +756,7 @@ async def startServices(args):
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((WEBSERVER_IP, WEBSOCKET_PORT))
   except:
-    printPrompt(TXT_RED + TXT_BOLD + '[-] Chat Engine cannot start (address already in use?)' + TXT_CLEAR)
+    printPrompt(TXT_RED + TXT_BOLD + '[-] Chat Engine cannot start (address already in use?)' + TXT_CLEAR, skipTranscription=True)
     stopServices()
     sys.exit(0)
   s.close()

@@ -539,41 +539,44 @@ var CHAT = {
     let msgBlock = document.createElement("li");
     msgBlock.className = "clearfix";
 
-    // Message user block
+    // Message user
     if((type != "signal")) {
-      let msgUserBlock = document.createElement("div");
-      msgUserBlock.classList.add("message-user");
+      let msgUser = document.createElement("div");
+      msgUser.classList.add("message-user");
       switch(type) {
         case "my":
-          msgUserBlock.innerHTML = "To <b>" + message.to + "</b>:";
-          msgUserBlock.classList.add("text-right");
-          msgUserBlock.addEventListener("click", function() { CHAT.setMessageDestination(message.to); });
+          msgUser.innerHTML = "To <b>" + message.to + "</b>:";
+          msgUser.classList.add("text-right");
+          msgUser.addEventListener("click", function() { CHAT.setMessageDestination(message.to); });
           break;
         case "other":
-          msgUserBlock.innerHTML = "From <b>" + message.from + "</b> to <b>" + message.to + "</b>:";
-          msgUserBlock.addEventListener("click", function() { CHAT.setMessageDestination(message.from); });
+          msgUser.innerHTML = "From <b>" + message.from + "</b> to <b>" + message.to + "</b>:";
+          msgUser.addEventListener("click", function() { CHAT.setMessageDestination(message.from); });
+          break;
       }
-      msgBlock.appendChild(msgUserBlock);
+      msgBlock.appendChild(msgUser);
     }
 
     // Message text
     let msgMessage = document.createElement("div");
     msgMessage.classList.add("message");
     msgMessage.classList.add(type);
-    if(typeof message === "object") {
+    if((type == "signal")) {
+      msgMessage.innerHTML = message + "<div class='message-date'>" + (new Date()).toLocaleString() + "</div>";
+    } else {
       if((message.from == CHAT.ADMIN) && (message.to == CHAT.ADMIN)) msgMessage.classList.add("admin2admin");
       else if((message.from == CHAT.ADMIN) || (message.to == CHAT.ADMIN)) msgMessage.classList.add("admin");
 
-      // If it's a signal then print as HTML, if message add as text node
-      if((type == "signal")) {
-        msgMessage.innerHTML = message.message;
-      } else {
-        msgMessage.appendChild(document.createTextNode(message.message));
-      }
+      // Message content
+      msgMessage.appendChild(document.createTextNode(message.message));
+
+      // Date
+      let msgDate = document.createElement("div");
+      msgDate.classList.add("message-date");
+      msgDate.appendChild(document.createTextNode((new Date()).toLocaleString()));
+      msgMessage.appendChild(msgDate);
 
       msgMessage.addEventListener("click", function() { CHAT.setMessageDestination((type == "my") ? message.to : message.from); });
-    } else {
-      msgMessage.innerHTML = message;
     }
     msgBlock.appendChild(msgMessage);
 
