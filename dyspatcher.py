@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230409.142'
+BUILD = '20230410.145'
 ###########################################################
 
 import argparse
@@ -207,7 +207,7 @@ async def chatEngine(websocket):
                     await sendCommand('signal', payloadObj['user'], joinNotificationPayload)
 
                 # Show notification on admin interface
-                printPrompt(TXT_ORANGE + TXT_ITALIC + CLIENTS[websocketId]['user'] + ' joined chat' + TXT_CLEAR)
+                printPrompt(TXT_ORANGE + TXT_ITALIC + CLIENTS[websocketId]['user'] + ' (' + CLIENTS[websocketId]['ip'][0] + ') joined chat' + TXT_CLEAR)
 
               except:
                 pass
@@ -220,14 +220,14 @@ async def chatEngine(websocket):
   # When connection is closed, then remove client from list
   finally:
     if websocketId in CLIENTS:
-      user_tmp = CLIENTS[websocketId]['user']
+      client_tmp = CLIENTS[websocketId]
       del CLIENTS[websocketId]
       if(websocketId == ADMIN['ws']):
         ADMIN['ws'] = False
       else:
-        await sendCommand('signal', user_tmp, { 'code':'chat-left' })
-      printPrompt(TXT_ORANGE + TXT_ITALIC + user_tmp + ' abandoned chat' + TXT_CLEAR)
-    printPrompt(TXT_CYAN + '[i] [WEB Socket] Connection closed by ' + websocket.remote_address[0] + TXT_CLEAR)
+        await sendCommand('signal', client_tmp['user'], { 'code':'chat-left' })
+      printPrompt(TXT_ORANGE + TXT_ITALIC + client_tmp['user'] + ' (' + client_tmp['ip'][0] + ') abandoned chat' + TXT_CLEAR)
+      printPrompt(TXT_CYAN + '[i] [WEB Socket] Connection closed by ' + client_tmp['ip'][0] + ' (' + client_tmp['user'] + ')' + TXT_CLEAR)
 
 
 #
