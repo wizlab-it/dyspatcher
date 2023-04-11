@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230411.146'
+BUILD = '20230411.149'
 ###########################################################
 
 import argparse
@@ -48,7 +48,7 @@ WEBSERVER_SSL_CONFIG = None
 ADMIN = { 'nickname':'ADMIN', 'ws':False, 'custom-private-key':False }
 SSH_PFW_CONFIG = None
 CRYPTO_CONFIG = { }
-MISC_CONFIG = { 'daemonMode':False, 'welcome-message':None, 'disable-all':False, 'only-admin':False }
+MISC_CONFIG = { 'daemon':False, 'welcome-message':None, 'disable-all':False, 'only-admin':False }
 TRANSCRIPTION = { 'filename':None, 'handler':None }
 
 
@@ -596,7 +596,7 @@ def printPrompt(str, onPreviousLine=False, skipTranscription=False):
   str = datetime.now().strftime('[%d-%m-%Y, %H:%M:%S] ') + str
 
   # Print message to prompt (if not in daemon mode)
-  if(not MISC_CONFIG['daemonMode']):
+  if(not MISC_CONFIG['daemon']):
     print('\r' + (TXT_PREVLINE if onPreviousLine else '') + str + '\n>>> ', end='', flush=True)
 
   # Store in transcription (if set)
@@ -769,7 +769,7 @@ async def startServices(args):
   # Prompt and chat engine
   try:
     tasks = [ initChatEngine() ]
-    if(not MISC_CONFIG['daemonMode']):
+    if(not MISC_CONFIG['daemon']):
       tasks.append(asyncio.to_thread(initPrompt))
     await asyncio.gather(*tasks)
   except:
@@ -824,7 +824,7 @@ if __name__ == '__main__':
   parser.add_argument('--disable-all', action='store_true', help='Prevent users to send messages to @all destination (admin can always send to @all)')
   parser.add_argument('--only-admin', action='store_true', help='Allow users to send messages only to admin (forces --disable-all, admin can always send to everybody)')
   parser.add_argument('--transcription', action='store', help='File where to store the full chat transcription', type=str)
-  parser.add_argument('-b','--background', action='store_true', help='Daemon mode, goes background once service is started')
+  parser.add_argument('-d','--daemon', action='store_true', help='Daemon mode, goes in background once service is started (requires custom admin private key and transcription to be enabled)')
   parser.add_argument('--ssl-certificate', action='store', help='Web Server SSL certificate file', type=str)
   parser.add_argument('--ssl-key', action='store', help='Web Server SSL key file', type=str)
   parser.add_argument('--ssl-cabundle', action='store', help='Web Server SSL CA Bundle file', type=str)
@@ -930,11 +930,33 @@ if __name__ == '__main__':
         print('[-] Invalid transcription file: invalid characters in name or file already exists')
         sys.exit(1);
 
-    # Check if it has to run in Daemon mode
-    if(args.background == True):
-      MISC_CONFIG['daemonMode'] = True
-      print('[i] Daemon mode selected, going background once started')
-      print('[i] To stop: ' + TXT_BOLD + 'kill -HUP ' + str(os.getpid()) + TXT_CLEAR + '\n')
+    # Check if it has to run as Daemon
+    if(args.daemon == True):
+      MISC_CONFIG['daemon'] = True
+      print('[i] ' + TXT_BOLD + TXT_RED + 'Daemon mode selected' + TXT_CLEAR)
+
+      # Check if transcription is set
+      if(TRANSCRIPTION['handler'] == None):
+        print('[-] Transcription is required to run as daemon')
+        sys.exit(1);
+
+      # Check if admin custom keys are set
+      if(ADMIN['custom-private-key'] == False):
+        print('[-] Admin custom Private Key is required to run as daemon, or you won\'t be able to administrate the chat')
+        sys.exit(1);
+
+      print('[i] Going background in 3 seconds...')
+
+      # Forking...
+      pid = os.fork()
+      if(pid == 0):
+        # New process that will run detached
+        print('[i] Daemon started')
+        print('[i] To stop: ' + TXT_BOLD + TXT_RED + 'kill -HUP ' + str(os.getpid()) + TXT_CLEAR + '\n')
+      else:
+        # Original process, wait 1 second the exit
+        time.sleep(3)
+        sys.exit(1);
 
     #
     # Start services
