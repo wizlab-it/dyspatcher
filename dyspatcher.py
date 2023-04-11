@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230410.145'
+BUILD = '20230411.146'
 ###########################################################
 
 import argparse
@@ -48,7 +48,7 @@ WEBSERVER_SSL_CONFIG = None
 ADMIN = { 'nickname':'ADMIN', 'ws':False, 'custom-private-key':False }
 SSH_PFW_CONFIG = None
 CRYPTO_CONFIG = { }
-MISC_CONFIG = { 'welcome-message':None, 'disable-all':False, 'only-admin':False }
+MISC_CONFIG = { 'daemonMode':False, 'welcome-message':None, 'disable-all':False, 'only-admin':False }
 TRANSCRIPTION = { 'filename':None, 'handler':None }
 
 
@@ -594,7 +594,12 @@ def promptProcessor():
 # Output a string on the command prompt
 def printPrompt(str, onPreviousLine=False, skipTranscription=False):
   str = datetime.now().strftime('[%d-%m-%Y, %H:%M:%S] ') + str
-  print('\r' + (TXT_PREVLINE if onPreviousLine else '') + str + '\n>>> ', end='', flush=True)
+
+  # Print message to prompt (if not in daemon mode)
+  if(not MISC_CONFIG['daemonMode']):
+    print('\r' + (TXT_PREVLINE if onPreviousLine else '') + str + '\n>>> ', end='', flush=True)
+
+  # Store in transcription (if set)
   if((TRANSCRIPTION['handler'] != None) and (skipTranscription == False)):
     TRANSCRIPTION['handler'].write(str + '\n')
     TRANSCRIPTION['handler'].flush()
@@ -729,7 +734,7 @@ def aesDecrypt(iv, ciphertext):
 
 # Start services
 async def startServices(args):
-  print('[+] Starting services...')
+  printPrompt('[+] Starting services...')
 
   # Crypto
   if(not initCrypto()):
@@ -763,7 +768,9 @@ async def startServices(args):
 
   # Prompt and chat engine
   try:
-    tasks = [asyncio.to_thread(initPrompt), initChatEngine()]
+    tasks = [ initChatEngine() ]
+    if(not MISC_CONFIG['daemonMode']):
+      tasks.append(asyncio.to_thread(initPrompt))
     await asyncio.gather(*tasks)
   except:
     pass
@@ -817,6 +824,7 @@ if __name__ == '__main__':
   parser.add_argument('--disable-all', action='store_true', help='Prevent users to send messages to @all destination (admin can always send to @all)')
   parser.add_argument('--only-admin', action='store_true', help='Allow users to send messages only to admin (forces --disable-all, admin can always send to everybody)')
   parser.add_argument('--transcription', action='store', help='File where to store the full chat transcription', type=str)
+  parser.add_argument('-b','--background', action='store_true', help='Daemon mode, goes background once service is started')
   parser.add_argument('--ssl-certificate', action='store', help='Web Server SSL certificate file', type=str)
   parser.add_argument('--ssl-key', action='store', help='Web Server SSL key file', type=str)
   parser.add_argument('--ssl-cabundle', action='store', help='Web Server SSL CA Bundle file', type=str)
@@ -921,6 +929,12 @@ if __name__ == '__main__':
       else:
         print('[-] Invalid transcription file: invalid characters in name or file already exists')
         sys.exit(1);
+
+    # Check if it has to run in Daemon mode
+    if(args.background == True):
+      MISC_CONFIG['daemonMode'] = True
+      print('[i] Daemon mode selected, going background once started')
+      print('[i] To stop: ' + TXT_BOLD + 'kill -HUP ' + str(os.getpid()) + TXT_CLEAR + '\n')
 
     #
     # Start services
