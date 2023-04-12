@@ -48,6 +48,8 @@ And now, if you are still interested, the long part.
     * [How to run on smartphones](#how-to-run-on-smartphones)
     * [Administrator interface](#administrator-interface)
     * [Administrator encryption keys](#administrator-encryption-keys)
+    * [Chat transcription](#chat-transcription)
+    * [Daemon mode](#daemon-mode)
     * [Other parameters](#other-parameters)
   * [Client](#client)
     * [Custom encryption keys](#custom-encryption-keys)
@@ -203,6 +205,23 @@ python dyspatcher.py --admin-private-key private.pem
 The public key is automatically calculated from the private key.
 
 
+### Chat transcription
+
+When starting the service, it is possible to specify a file where to save a full transcription of the chat from the admin point of view (both messages seen by the admin and info logs).
+
+Transcription doesn't (and can't) include direct *user-to-user* messages.
+
+The file where to store the transcription can be specified via the **--transcription** command line argument. The file must not exists.
+
+
+### Daemon mode
+
+*Dyspatcher* can run in daemon mode. When started in daemon mode via the **--daemon** argument, the service goes background after few seconds.
+
+Command line prompt is not available when running in daemon mode.
+
+Daemon mode requires [transcription](#chat-transcription) to be active, and an [administrator custom encryption key](#administrator-encryption-keys) must be used, to allow the admin to connect via [Web Interface](#client-web-interface-for-administrator)
+
 
 ### Other parameters
 
@@ -236,7 +255,7 @@ openssl rsa -in private.pem -pubout -out public.pem
 Administrator can chat via web interface.
 
 To connect to the web interface as administrator, follow these steps:
- - export the private and public key from the standard command line interface with command **/key**
+ - export the private and public key from the standard command line interface with command **/key** or use an [administrator custom encryption key](#administrator-encryption-keys)
  - open the web chat interface
  - set any username
  - click on *Use custom keys* and enter the administrator keys previously exported from the server
