@@ -220,7 +220,7 @@ The file where to store the transcription can be specified via the **--transcrip
 
 Command line prompt is not available when running in daemon mode.
 
-Daemon mode requires [transcription](#chat-transcription) to be active, and an [administrator custom encryption key](#administrator-encryption-keys) must be used, to allow the admin to connect via [Web Interface](#client-web-interface-for-administrator)
+Daemon mode requires [transcription](#chat-transcription) to be active, and an [administrator custom encryption key](#administrator-encryption-keys) must be used, to allow the admin to connect via [Web Interface](#client-web-interface-for-administrator).
 
 
 ### Other parameters
