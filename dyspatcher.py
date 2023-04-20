@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230411.149'
+BUILD = '20230420.150'
 ###########################################################
 
 import argparse
@@ -264,7 +264,7 @@ async def processMessage(websocketId, user, data):
             plaintextObj['from'] = TXT_RED + plaintextObj['from'] + ' (via web)'
 
           # Print message locally and forward to others
-          printPrompt('From ' + TXT_GREEN + TXT_BOLD + plaintextObj['from'] + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
+          printPrompt(TXT_ORANGE + TXT_BOLD + '📨' + TXT_CLEAR + ' From ' + TXT_GREEN + TXT_BOLD + plaintextObj['from'] + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
           await sendCommand('message', '', data)
 
         except:
@@ -291,10 +291,10 @@ async def processMessage(websocketId, user, data):
 
           # Check if the received message is just the server copy of a message sent from the admin via web interface
           if(CLIENTS[websocketId]['isAdmin']):
-            printPrompt('From ' + TXT_RED + TXT_BOLD + plaintextObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
+            printPrompt(TXT_ORANGE + TXT_BOLD + '📨' + TXT_CLEAR + ' From ' + TXT_RED + TXT_BOLD + plaintextObj['from'] + ' (via web)' + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
             return
           else:
-            printPrompt('From ' + TXT_GREEN + TXT_BOLD + plaintextObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
+            printPrompt(TXT_ORANGE + TXT_BOLD + '📨' + TXT_CLEAR + ' From ' + TXT_GREEN + TXT_BOLD + plaintextObj['from'] + TXT_CLEAR + ' to ' + TXT_RED + TXT_BOLD + plaintextObj['to'] + TXT_CLEAR + ': ' + plaintextObj['message'])
             if(ADMIN['ws']):
               await sendCommand('message', '', data, [CLIENTS[ADMIN['ws']]['ws']])
               return
@@ -460,8 +460,10 @@ def initWebServer():
   printPrompt('[+] ... Web Server started (' + webserverUrl + ')')
   try:
     WEBSERVER.serve_forever()
-  except:
-    pass
+  except Exception as e:
+    printPrompt('[-] ... Web Server crashed: ' + str(e))
+    #except:
+    #pass
   WEBSERVER.server_close()
 
 
@@ -578,7 +580,7 @@ def promptProcessor():
         asyncio.run(sendRSAMessage(ADMIN['nickname'], CLIENTS[ADMIN['ws']], json.dumps(webCopyPayload), {'isWebAdminMsgCopy':True}))
 
       # Print message on console
-      printPrompt('From ' + TXT_RED + TXT_BOLD + ADMIN['nickname'] + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + commandOrDestination + TXT_CLEAR + ': ' + message, onPreviousLine=True)
+      printPrompt(TXT_ORANGE + TXT_BOLD + '📨' + TXT_CLEAR + ' From ' + TXT_RED + TXT_BOLD + ADMIN['nickname'] + TXT_CLEAR + ' to ' + TXT_GREEN + TXT_BOLD + commandOrDestination + TXT_CLEAR + ': ' + message, onPreviousLine=True)
 
       # If message is for @all, then AES encrypt and send, otherwise send normal message
       if(commandOrDestination == "all"):
@@ -593,7 +595,7 @@ def promptProcessor():
 
 # Output a string on the command prompt
 def printPrompt(str, onPreviousLine=False, skipTranscription=False):
-  str = datetime.now().strftime('[%d-%m-%Y, %H:%M:%S] ') + str
+  str = (datetime.now().strftime('[%d-%m-%Y, %H:%M:%S] ') if (str != TXT_PREVLINE) else '') + str
 
   # Print message to prompt (if not in daemon mode)
   if(not MISC_CONFIG['daemon']):
