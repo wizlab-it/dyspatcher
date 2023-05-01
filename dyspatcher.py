@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230420.150'
+BUILD = '20230501.154'
 ###########################################################
 
 import argparse
@@ -82,39 +82,46 @@ class ChatWebServer(BaseHTTPRequestHandler):
 
   # Silent webserver, do not log connections
   def log_message(self, format, *args):
-    if(self.path == '/'):
-      printPrompt(TXT_CYAN + '[i] [WEB Server] Web interface loaded from ' + self.request.getpeername()[0] + TXT_CLEAR)
+    try:
+      if(self.path == '/'):
+        printPrompt(TXT_CYAN + '[i] [WEB Server] Web interface loaded from ' + self.request.getpeername()[0] + TXT_CLEAR)
+    except:
+      pass
 
   # Process GET requests
   def do_GET(self):
-    match self.path:
+    try:
+      match self.path:
 
-      # dyspatcher.html file
-      case '/':
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
-        self.send_header('Pragma', 'no-cache')
-        self.send_header('Expires', '0')
-        self.end_headers()
-        with open('dyspatcher.html', 'rb') as file:
-          dyspatcher_html = file.read().replace(b'__WEBSOCKET_PORT_TOKEN__', bytes(str(WEBSOCKET_PORT) + ',' + ('false' if (WEBSERVER_SSL_CONFIG == None) else 'true'), 'utf8'))
-          self.wfile.write(dyspatcher_html)
+        # dyspatcher.html file
+        case '/':
+          self.send_response(200)
+          self.send_header('Content-type', 'text/html')
+          self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+          self.send_header('Pragma', 'no-cache')
+          self.send_header('Expires', '0')
+          self.end_headers()
+          with open('dyspatcher.html', 'rb') as file:
+            dyspatcher_html = file.read().replace(b'__WEBSOCKET_PORT_TOKEN__', bytes(str(WEBSOCKET_PORT) + ',' + ('false' if (WEBSERVER_SSL_CONFIG == None) else 'true'), 'utf8'))
+            self.wfile.write(dyspatcher_html)
 
-      # dyspatcher.js file
-      case '/dyspatcher.js':
-        self.send_response(200)
-        self.send_header('Content-type', 'application/javascript')
-        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
-        self.send_header('Pragma', 'no-cache')
-        self.send_header('Expires', '0')
-        self.end_headers()
-        with open('dyspatcher.js', 'rb') as file:
-          self.wfile.write(file.read())
+        # dyspatcher.js file
+        case '/dyspatcher.js':
+          self.send_response(200)
+          self.send_header('Content-type', 'application/javascript')
+          self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+          self.send_header('Pragma', 'no-cache')
+          self.send_header('Expires', '0')
+          self.end_headers()
+          with open('dyspatcher.js', 'rb') as file:
+            self.wfile.write(file.read())
 
-      # unknown file, error 404
-      case _:
-        self.send_error(404)
+        # unknown file, error 404
+        case _:
+          self.send_error(404)
+
+    except:
+      pass
 
 
 ###########################################################
@@ -460,10 +467,8 @@ def initWebServer():
   printPrompt('[+] ... Web Server started (' + webserverUrl + ')')
   try:
     WEBSERVER.serve_forever()
-  except Exception as e:
-    printPrompt('[-] ... Web Server crashed: ' + str(e))
-    #except:
-    #pass
+  except:
+    pass
   WEBSERVER.server_close()
 
 
@@ -941,6 +946,10 @@ if __name__ == '__main__':
       if(TRANSCRIPTION['handler'] == None):
         print('[-] Transcription is required to run as daemon')
         sys.exit(1);
+
+      # Redirect STDERR to transcription handler
+      sys.stderr = TRANSCRIPTION['handler']
+      #sys.stdout = TRANSCRIPTION['handler']
 
       # Check if admin custom keys are set
       if(ADMIN['custom-private-key'] == False):
