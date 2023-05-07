@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230501.154'
+BUILD = '20230507.156'
 ###########################################################
 
 import argparse
@@ -465,11 +465,16 @@ def initWebServer():
   webserverUrl = TXT_BLUE + TXT_BOLD + 'http' + ('' if (WEBSERVER_SSL_CONFIG == None) else 's') + '://' + WEBSERVER_IP + ':' + str(WEBSERVER_PORT) + TXT_CLEAR
   if(SSH_PFW_CONFIG != None): webserverUrl = webserverUrl + ' and ' + TXT_BLUE + TXT_BOLD + 'http' + ('' if (WEBSERVER_SSL_CONFIG == None) else 's') + '://' + SSH_PFW_CONFIG['ip'] + ':' + str(WEBSERVER_PORT) + TXT_CLEAR
   printPrompt('[+] ... Web Server started (' + webserverUrl + ')')
+
   try:
     WEBSERVER.serve_forever()
   except:
     pass
-  WEBSERVER.server_close()
+
+  try:
+    WEBSERVER.server_close()
+  except:
+    pass
 
 
 # Init SSH Port Forwarding
@@ -847,9 +852,6 @@ if __name__ == '__main__':
   try:
     # Welcome message
     print(TXT_BOLD + 'Welcome to ' + PROGNAME + ' ' + VERSION + TXT_CLEAR + '\n')
-    print(TXT_BOLD + 'Instructions:' + TXT_CLEAR)
-    print('[i] Send ' + TXT_BOLD + '/help' + TXT_CLEAR + ' for help')
-    print('[i] Messages: ' + TXT_BOLD + '@{username} {message}' + TXT_CLEAR + '\n')
 
     #
     # Process args
@@ -956,18 +958,27 @@ if __name__ == '__main__':
         print('[-] Admin custom Private Key is required to run as daemon, or you won\'t be able to administrate the chat')
         sys.exit(1);
 
-      print('[i] Going background in 3 seconds...')
-
       # Forking...
       pid = os.fork()
       if(pid == 0):
         # New process that will run detached
         print('[i] Daemon started')
+        print('[i] Going background in 3 seconds...')
         print('[i] To stop: ' + TXT_BOLD + TXT_RED + 'kill -HUP ' + str(os.getpid()) + TXT_CLEAR + '\n')
+        printPrompt('[i] ' + TXT_BOLD + TXT_RED + 'Daemon started' + TXT_CLEAR)
+        printPrompt('[i] To stop: ' + TXT_BOLD + TXT_RED + 'kill -HUP ' + str(os.getpid()) + TXT_CLEAR)
+        printPrompt('[i] ----------------------------------')
       else:
         # Original process, wait 1 second the exit
         time.sleep(3)
         sys.exit(1);
+
+    else:
+      # Standard mode (no daemon): print instructions
+      print(TXT_BOLD + 'Instructions:' + TXT_CLEAR)
+      print('[i] Send ' + TXT_BOLD + '/help' + TXT_CLEAR + ' for help')
+      print('[i] Messages: ' + TXT_BOLD + '@{username} {message}' + TXT_CLEAR + '\n')
+
 
     #
     # Start services
