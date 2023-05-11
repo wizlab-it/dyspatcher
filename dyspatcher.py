@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230511.158'
+BUILD = '20230511.159'
 ###########################################################
 
 import argparse
@@ -949,9 +949,9 @@ if __name__ == '__main__':
         print('[-] Transcription is required to run as daemon')
         sys.exit(1);
 
-      # Redirect STDERR to devnull and STDOUT to Transcription file
+      # Redirect STDERR to devnull
       sys.stderr = open(os.devnull, 'w')
-      sys.stdout = TRANSCRIPTION['handler']
+      #sys.stdout = TRANSCRIPTION['handler']
 
       # Check if admin custom keys are set
       if(ADMIN['custom-private-key'] == False):
