@@ -86,8 +86,16 @@
           Only lowercase letters and digits, no spaces, no special characters, minimum 4 maximum 15 characters
         </p>
         <div id="custom-keys">
-          <p><textarea id="custom-private-key" rows="4" placeholder="Private Key"></textarea><br>openssl genrsa -out private.pem 4096</p>
-          <p><textarea id="custom-public-key" rows="4" placeholder="Public Key"></textarea><br>openssl rsa -in private.pem -pubout -out public.pem</p>
+          <p>
+            <b>Select the Private Key file:</b><br>
+            <input type="file" data-keytype="private" onchange="CHAT.loadKeyFile(event)"><br>
+            <i>openssl genrsa -out private.pem 4096</i>
+          </p>
+          <p>
+            <b>Select the Public Key file:</b><br>
+            <input type="file" data-keytype="public" onchange="CHAT.loadKeyFile(event)"><br>
+            <i>openssl rsa -in private.pem -pubout -out public.pem</i>
+          </p>
         </div>
         <p><button id="chatInitButton" onclick="CHAT.chatInit(__WEBSOCKET_PORT_TOKEN__)">Connect</button></p>
         <p><a onclick="CHAT.showCustomKeysFields(event);">Use custom keys</a></p>

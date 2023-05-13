@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230511.159'
+BUILD = '20230512.160'
 ###########################################################
 
 import argparse

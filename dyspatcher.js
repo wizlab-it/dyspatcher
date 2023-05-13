@@ -3,7 +3,7 @@ var CHAT = {
   SOCKET: null,
   USER: null,
   ADMIN: null,
-  OBJ_IDS: ["loading", "chat", "user", "chat-connect", "chat-localuser-name", "chat-userslist", "chat-localuser", "chat-message", "chat-message-txt", "userslist", "userslist-toggler", "chatInitButton", "receivedMessages", "custom-keys", "custom-private-key", "custom-public-key", "chat-localuser-keyid"],
+  OBJ_IDS: ["loading", "chat", "user", "chat-connect", "chat-localuser-name", "chat-userslist", "chat-localuser", "chat-message", "chat-message-txt", "userslist", "userslist-toggler", "chatInitButton", "receivedMessages", "custom-keys", "chat-localuser-keyid"],
   OBJS: {},
   CONFIGS: { "is-admin":false },
   CRYPTO: {
@@ -11,7 +11,7 @@ var CHAT = {
       "oaep": { "name":"RSA-OAEP", "modulusLength":4096, "publicExponent": new Uint8Array([1, 0, 1]), "hash":"SHA-256" },
       "pss": { "name":"RSA-PSS", "hash":"SHA-256", "saltLength":256 },
     },
-    "keys": { "objs":null, "pem":{}, "keyid":null },
+    "keys": { "objs":null, "pem":{}, "keyid":null, "files":{ "private":null, "public":null } },
     "keyCache": { },
   },
 
@@ -65,10 +65,8 @@ var CHAT = {
     CHAT.USER = CHAT.OBJS["user"].value;
 
     // Check if custom keys are set
-    let customPrivateKey = CHAT.OBJS["custom-private-key"].value.trim();
-    let customPublicKey = CHAT.OBJS["custom-public-key"].value.trim();
-    if(customPrivateKey || customPublicKey) {
-      if(!await CHAT.cryptoImportCustomRSAKeys(customPrivateKey, customPublicKey)) {
+    if(CHAT.CRYPTO.keys.files.private || CHAT.CRYPTO.keys.files.public) {
+      if(!await CHAT.cryptoImportCustomRSAKeys(CHAT.CRYPTO.keys.files.private, CHAT.CRYPTO.keys.files.public)) {
         CHAT.printMessage("signal", "Invalid custom keys");
         return;
       }
@@ -238,6 +236,33 @@ var CHAT = {
   //
   // Crypto methods
   //
+
+  // Load key file from filesystem
+  loadKeyFile: function(e) {
+    let file = e.target.files[0];
+    let type = e.target.dataset.keytype;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      let fileContent = e.target.result.trim();
+      switch(type) {
+        case "private":
+          if(fileContent.indexOf(CHAT.PEM_PRIVATE_HEADER) !== 0) {
+            alert("Invalid Private Key file");
+            return;
+          }
+          CHAT.CRYPTO.keys.files.private = fileContent;
+          break;
+        case "public":
+          if(fileContent.indexOf(CHAT.PEM_PUBLIC_HEADER) !== 0) {
+            alert("Invalid Public Key file");
+            return;
+          }
+          CHAT.CRYPTO.keys.files.public = fileContent;
+          break;
+      }
+    };
+    reader.readAsText(file);
+  },
 
   // Generate Keys
   cryptoGenRSAKeys: function() {
@@ -641,8 +666,6 @@ var CHAT = {
 
   showCustomKeysFields: function(event) {
     event.target.innerHTML = (CHAT.OBJS["custom-keys"].classList.toggle("active")) ? "Use random keys" : "Use custom keys";
-    CHAT.OBJS["custom-private-key"].value = "";
-    CHAT.OBJS["custom-public-key"].value = "";
   }
 }
 
