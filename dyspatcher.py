@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230512.160'
+BUILD = '20230528.162'
 ###########################################################
 
 import argparse
@@ -165,7 +165,7 @@ async def chatEngine(websocket):
                   raise Exception("Invalid username")
 
                 # Process key
-                keyhash = hashlib.sha256(payloadObj['data']['publickey'].encode('utf-8')).hexdigest()
+                keyhash = hashlib.sha256(base64.b64decode(payloadObj['data']['publickey'])).hexdigest()
                 keyRSA = serialization.load_pem_public_key(('-----BEGIN PUBLIC KEY-----\n' + payloadObj['data']['publickey'] + '\n-----END PUBLIC KEY-----').encode('utf-8'))
 
                 # If the public key hash is the same of the admin public key hash, then the connected client is the admin via web interface
@@ -421,7 +421,7 @@ def initCrypto():
   CRYPTO_CONFIG['publickey'] = CRYPTO_CONFIG['privatekey'].public_key()
   CRYPTO_CONFIG['publickey-pem'] = CRYPTO_CONFIG['publickey'].public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
   CRYPTO_CONFIG['publickey-text'] = packPublicKey(CRYPTO_CONFIG['publickey-pem'])
-  CRYPTO_CONFIG['publickey-hash'] = hashlib.sha256(CRYPTO_CONFIG['publickey-text'].encode('utf-8')).hexdigest()
+  CRYPTO_CONFIG['publickey-hash'] = hashlib.sha256(base64.b64decode(CRYPTO_CONFIG['publickey-text'])).hexdigest()
 
   # Generate AES 256bit key for @all destination
   CRYPTO_CONFIG['aeskey'] = { 'bin':os.urandom(32) }
@@ -512,10 +512,10 @@ def promptProcessor():
         # Command: users - list all connected users
         case 'users' | 'u':
           printPrompt('[i] Connected users:')
-          printPrompt('[i]   * ' + TXT_RED + TXT_BOLD + ADMIN['nickname'] + TXT_CLEAR + ' (🔒' + TXT_CYAN + CRYPTO_CONFIG['publickey-hash'][:10] + TXT_CLEAR + CRYPTO_CONFIG['publickey-hash'][10:] + ')')
+          printPrompt('[i]   * ' + TXT_RED + TXT_BOLD + ADMIN['nickname'] + TXT_CLEAR + ' (🔒' + TXT_CYAN + CRYPTO_CONFIG['publickey-hash'][:12] + TXT_CLEAR + CRYPTO_CONFIG['publickey-hash'][12:] + ')')
           cnt = 1
           for c in CLIENTS:
-            printPrompt('[i]   * ' + CLIENTS[c]['user'] + ' (' + CLIENTS[c]['ip'][0] + ', 🔒' + TXT_CYAN + CLIENTS[c]['publickey']['hash'][:10] + TXT_CLEAR + CLIENTS[c]['publickey']['hash'][10:] + ')')
+            printPrompt('[i]   * ' + CLIENTS[c]['user'] + ' (' + CLIENTS[c]['ip'][0] + ', 🔒' + TXT_CYAN + CLIENTS[c]['publickey']['hash'][:12] + TXT_CLEAR + CLIENTS[c]['publickey']['hash'][12:] + ')')
             cnt = cnt + 1
           printPrompt('[i] ' + str(cnt) + ' user' + ('s' if (cnt != 1) else '') + ' connected')
 

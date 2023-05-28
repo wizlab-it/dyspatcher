@@ -482,7 +482,7 @@ var CHAT = {
     if(isConnected) {
       CHAT.OBJS["chat-connect"].classList.remove("active");
       CHAT.OBJS["chat-localuser-name"].innerHTML = CHAT.USER;
-      CHAT.OBJS["chat-localuser-keyid"].innerHTML = CHAT.CRYPTO.keys.keyid.substr(0, 10);
+      CHAT.OBJS["chat-localuser-keyid"].innerHTML = CHAT.CRYPTO.keys.keyid.substr(0, 12);
       CHAT.OBJS["chat-localuser-keyid"].title = "Full Key ID: " + CHAT.CRYPTO.keys.keyid;
       CHAT.OBJS["chat-userslist"].classList.add("active");
       CHAT.OBJS["chat-localuser"].style.display = "block";
@@ -623,7 +623,7 @@ var CHAT = {
     userBlock.title = "Full Key ID: " + publickey.hash;
     userBlock.classList.add("userslist-user");
     if((user == CHAT.USER) && (user != CHAT.ADMIN)) userBlock.classList.add("hide");
-    userBlock.innerHTML = "<div class='user'>" + user + "</div><div class='keyid'>Key ID: " + publickey.hash.substr(0, 10) + "</div>";
+    userBlock.innerHTML = "<div class='user'>" + user + "</div><div class='keyid'>Key ID: " + publickey.hash.substr(0, 12) + "</div>";
     userBlock.dataset.user = user;
     if(((typeof publickey) === "object") && (publickey.text != "")) {
       userBlock.dataset.user = user;
