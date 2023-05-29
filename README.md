@@ -55,6 +55,7 @@ And now, if you are still interested, the long part.
     * [Other parameters](#other-parameters)
   * [Client](#client)
     * [Custom encryption keys](#custom-encryption-keys)
+    * [Restrictions on users allowed to connect](#restrictions-on-users-allowed-to-connect)
     * [Client web interface for administrator](#client-web-interface-for-administrator)
   * [Encryption](#encryption)
     * [Public Key fingerprint](#public-key-fingerprint)
@@ -177,6 +178,7 @@ The administrator interface is available via command line prompt. The chat inter
 Commands start with the character **/** (slash). Available commands are:
  * **/users**: list connected users
  * **/kick [username]**: force disconnection of an user
+ * **/allowlist**: list Public Keys allowed to connect (if enabled at startup)
  * **/key [private/public]**: export private/public chat encryption keys
  * **/help**: show help
  * **/quit**: closes all the active connection and stops the service
@@ -253,6 +255,29 @@ openssl genrsa -out private.pem 4096
 openssl rsa -in private.pem -pubout -out public.pem
 ```
 
+
+### Restrictions on users allowed to connect
+
+It is possible to restrict who can connect to the chat service creating an *allow list* with the **Public Key fingerprints** that are allowed to connect. When the *allow list* is set, all the connections using Public Keys not listed in the allow list will be rejected.
+
+The *allow list* is a CSV file, with one entry per row. Each row needs to have the Public Key fingerprint and the username separated by a comma. Example:
+
+```
+public-key-fingerprint-1,username 1
+public-key-fingerprint-2,username 2
+...
+```
+
+The allow list is enabled at startup with:
+ * **--allow-list** *filename*: *filename* is the CSV file with the list of allowed public keys
+
+The **Public Key fingerprint** can be manually calculated as specified in the [Public Key fingerprint](#public-key-fingerprint) section.
+
+The username will be forced to the one defined in the *allow list*, without considering the username set by the user in the connection form.
+
+The *allow list* content can be updated at any time even during execution: any change will be immediately effective without requiring a restart of the service.
+
+
 ### Client web interface for administrator
 
 Administrator can chat via web interface.
@@ -269,6 +294,8 @@ Now the web client is connected to the chat service as administrator. The userna
 Every message sent or received from the standard command line prompt interface or the client web interface is reflected on the other part. Sent messages show from which interface they were sent. Direct *Admin-to-Admin* messages are allowed between the two interfaces.
 
 Only one administrator can be connected via the web client at any time.
+
+If an *allow list* is set, the **Administrator Public Key fingerprint** has to be listed in the allow list to permit the Administrator to login on the *Web Interface*. Please refer to section [Restrictions on users allowed to connect](#restrictions-on-users-allowed-to-connect) for more info about the *allow list*.
 
 
 ---

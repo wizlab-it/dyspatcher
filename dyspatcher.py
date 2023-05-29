@@ -11,7 +11,7 @@
 PROGNAME = 'Dyspatcher'
 AUTHOR = 'WizLab.it'
 VERSION = '0.9'
-BUILD = '20230528.162'
+BUILD = '20230529.167'
 ###########################################################
 
 import argparse
@@ -48,7 +48,7 @@ WEBSERVER_SSL_CONFIG = None
 ADMIN = { 'nickname':'ADMIN', 'ws':False, 'custom-private-key':False }
 SSH_PFW_CONFIG = None
 CRYPTO_CONFIG = { }
-MISC_CONFIG = { 'daemon':False, 'welcome-message':None, 'disable-all':False, 'only-admin':False }
+MISC_CONFIG = { 'daemon':False, 'welcome-message':None, 'disable-all':False, 'only-admin':False, 'allow-list':None }
 TRANSCRIPTION = { 'filename':None, 'handler':None }
 
 
@@ -167,6 +167,23 @@ async def chatEngine(websocket):
                 # Process key
                 keyhash = hashlib.sha256(base64.b64decode(payloadObj['data']['publickey'])).hexdigest()
                 keyRSA = serialization.load_pem_public_key(('-----BEGIN PUBLIC KEY-----\n' + payloadObj['data']['publickey'] + '\n-----END PUBLIC KEY-----').encode('utf-8'))
+
+                # If allow-list is active, then check if Key ID is allowed to connect
+                if(MISC_CONFIG['allow-list'] != None):
+                  keyFound = False
+                  if(os.path.isfile(MISC_CONFIG['allow-list'])):
+                    with open(MISC_CONFIG['allow-list'], 'r') as csvKeysFile:
+                      for csvKeysKey in csvKeysFile:
+                        csvKeysKey = csvKeysKey.strip().split(',')
+                        if(csvKeysKey[0].strip() == keyhash):
+                          keyFound = True
+                          payloadObj['user'] = csvKeysKey[1].strip()
+                          break
+
+                  if(not keyFound):
+                    await sendCommand('signal', '', { 'code':'notice', 'notice':'Your Public Key is not allowed to connect' }, [websocket])
+                    await websocket.close()
+                    raise Exception("Public Key not found in allow list")
 
                 # If the public key hash is the same of the admin public key hash, then the connected client is the admin via web interface
                 if(CRYPTO_CONFIG['publickey-hash'] == keyhash):
@@ -368,6 +385,16 @@ def getClientByUser(user):
 
 
 #
+# Get websocket from CLIENTS list by keyid
+#
+def getClientByKeyID(keyID):
+  for c in CLIENTS:
+    if CLIENTS[c]['publickey']['hash'] == keyID:
+      return CLIENTS[c]
+  return False
+
+
+#
 # Close all chat clients
 #
 async def chatClose():
@@ -532,6 +559,21 @@ def promptProcessor():
           except:
             pass
 
+        # Command: allowlist - show the allow list
+        case 'allowlist' | 'a':
+          if(MISC_CONFIG['allow-list'] == None):
+            printPrompt('[i] ' + TXT_BOLD + 'Allow list not active' + TXT_CLEAR)
+          else:
+            if(not os.path.isfile(MISC_CONFIG['allow-list'])):
+              printPrompt('[i] ' + TXT_BOLD + 'Allow list is active, but ' + TXT_RED + 'allow list file cannot be found!!!' + TXT_CLEAR)
+            else:
+              printPrompt('[i] ' + TXT_BOLD + 'Allow list:' + TXT_CLEAR)
+              with open(MISC_CONFIG['allow-list'], 'r') as csvKeysFile:
+                for csvKeysKey in csvKeysFile:
+                  csvKeysKey = csvKeysKey.strip().split(',')
+                  csvKeysKey[0] = csvKeysKey[0].strip()
+                  printPrompt('[i]   * ' + TXT_CYAN + csvKeysKey[0][:12] + TXT_CLEAR + csvKeysKey[0][12:] + ': ' + TXT_BOLD + csvKeysKey[1] + TXT_CLEAR + (' (🔒 connected)' if (getClientByKeyID(csvKeysKey[0]) != False) else ''))
+
         # Command: key - show private/public keys
         case 'key' | 'k':
           try:
@@ -548,7 +590,7 @@ def promptProcessor():
 
         # Command: help - show help
         case 'help' | 'h':
-          printPrompt('[i] Commands: /' + TXT_BOLD + 'u' + TXT_CLEAR + 'sers, /kick [username], /' + TXT_BOLD + 'k' + TXT_CLEAR + 'ey [' + TXT_BOLD + 'pub' + TXT_CLEAR + 'lic|' + TXT_BOLD + 'pri' + TXT_CLEAR + 'vate], /' + TXT_BOLD + 'h' + TXT_CLEAR + 'elp, /' + TXT_BOLD + 'q' + TXT_CLEAR + 'uit', skipTranscription=True)
+          printPrompt('[i] Commands: /' + TXT_BOLD + 'u' + TXT_CLEAR + 'sers, /kick [username], /' + TXT_BOLD + 'a' + TXT_CLEAR + 'llowlist, /' + TXT_BOLD + 'k' + TXT_CLEAR + 'ey [' + TXT_BOLD + 'pub' + TXT_CLEAR + 'lic|' + TXT_BOLD + 'pri' + TXT_CLEAR + 'vate], /' + TXT_BOLD + 'h' + TXT_CLEAR + 'elp, /' + TXT_BOLD + 'q' + TXT_CLEAR + 'uit', skipTranscription=True)
           printPrompt('[i] Messages: @{username} {message}', skipTranscription=True)
 
         # Command: quit - stop the service
@@ -835,6 +877,7 @@ if __name__ == '__main__':
   parser.add_argument('--welcome', action='store', help='Welcome message', type=str)
   parser.add_argument('--disable-all', action='store_true', help='Prevent users to send messages to @all destination (admin can always send to @all)')
   parser.add_argument('--only-admin', action='store_true', help='Allow users to send messages only to admin (forces --disable-all, admin can always send to everybody)')
+  parser.add_argument('--allow-list', action='store', help='CSV file with list of allowed Key IDs with their usernames. One Key ID/User per line, format: KEYID,Username', type=str)
   parser.add_argument('--transcription', action='store', help='File where to store the full chat transcription', type=str)
   parser.add_argument('-d','--daemon', action='store_true', help='Daemon mode, goes in background once service is started (requires custom admin private key and transcription to be enabled)')
   parser.add_argument('--ssl-certificate', action='store', help='Web Server SSL certificate file', type=str)
@@ -930,6 +973,14 @@ if __name__ == '__main__':
     if(args.only_admin):
       MISC_CONFIG['only-admin'] = True
       MISC_CONFIG['disable-all'] = True
+
+    # Users allow list
+    if(args.allow_list != None):
+      if(re.compile('^[a-zA-Z0-9\-\.]{1,30}$').match(args.allow_list) and os.path.isfile(args.allow_list)):
+        MISC_CONFIG['allow-list'] = args.allow_list
+      else:
+        print('[-] Invalid users allow list file: invalid characters in name or file not found')
+        sys.exit(1);
 
     # Chat transcription
     if(args.transcription != None):
